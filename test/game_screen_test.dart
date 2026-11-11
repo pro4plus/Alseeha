@@ -2,9 +2,13 @@
 //  * عطل التجمد عبر الواجهة: بعد انتهاء التوزيع والدور للكمبيوتر،
 //    يجب أن يتحرك الكمبيوتر وتظهر لافتة "دورك" (لا تجمد).
 //  * شاشة النتيجة: أكل آخر حجر للخصم يعرض "مبروووك!" و"العب تاني".
+//  * الاختيار يظهر فوراً: النقر على حجر يرسم إطاراً ذهبياً على
+//    مربعه ونقاط الوجهات (كان الاختيار يغيّر الحالة دون إعادة
+//    رسم الواجهة فلا يظهر شيء).
 import 'package:alseeja/game/seega_ai.dart';
 import 'package:alseeja/game/turn_controller.dart';
 import 'package:alseeja/screens/game_screen.dart';
+import 'package:alseeja/theme/sudanese_theme.dart';
 import 'package:alseeja/ui/board_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,5 +121,74 @@ void main() {
     expect(find.text('اللاعب 1 فاز!'), findsOneWidget);
     expect(find.text('العب تاني'), findsOneWidget);
     expect(find.text('الرئيسية'), findsOneWidget);
+  });
+
+  testWidgets('الاختيار يظهر فوراً: إطار ذهبي على مربع الحجر المحدد',
+      (WidgetTester tester) async {
+    final controller = TurnController(
+      boardSize: 5,
+      vsComputer: false,
+    );
+    addTearDown(controller.dispose);
+
+    final engine = controller.engine;
+    engine.board[1][1] = 1;
+    engine.board[1][4] = 1;
+    engine.board[1][2] = 2;
+    engine.placingPhase = false;
+    engine.currentPlayer = 1;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GameScreen(
+          config: const GameConfig(
+            boardSize: 5,
+            vsComputer: false,
+            p1Asset: p1Stone,
+            p2Asset: p2Stone,
+          ),
+          debugController: controller,
+        ),
+      ),
+    );
+    controller.debugSyncAfterExternalSetup();
+    await tester.pump();
+
+    bool hasGoldTileBorder() {
+      return find
+          .descendant(
+            of: find.byType(BoardView),
+            matching: find.byWidgetPredicate((w) =>
+                w is Container &&
+                w.decoration is BoxDecoration &&
+                (w.decoration as BoxDecoration).border is Border &&
+                ((w.decoration as BoxDecoration).border as Border)
+                        .top
+                        .color ==
+                    SudaneseTheme.gold),
+          )
+          .evaluate()
+          .isNotEmpty;
+    }
+
+    final boardRect = tester.getRect(find.byType(BoardView));
+    final cell = (boardRect.width - 16) / 5;
+    Offset centreOf(int r, int c) => boardRect.topLeft +
+        Offset(8 + (c + 0.5) * cell, 8 + (r + 0.5) * cell);
+
+    expect(hasGoldTileBorder(), isFalse);
+
+    // النقر على الحجر نفسه (وسط صورته) يختاره ويظهر الإطار.
+    await tester.tapAt(centreOf(1, 4));
+    await tester.pump();
+    expect(controller.selectedTile, [1, 4]);
+    expect(hasGoldTileBorder(), isTrue,
+        reason: 'النقر على الحجر لم يرسم الإطار الذهبي على مربعه');
+
+    // النقر على الحجر المحدد نفسه يلغي الاختيار ويخفي الإطار.
+    await tester.tapAt(centreOf(1, 4));
+    await tester.pump();
+    expect(controller.selectedTile, isNull);
+    expect(hasGoldTileBorder(), isFalse);
   });
 }
