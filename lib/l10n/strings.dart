@@ -14,10 +14,18 @@ class Strings {
       isArabic ? 'العب ضد الكمبيوتر' : 'Play vs Computer';
   String get playVsFriend =>
       isArabic ? 'لاعبين على نفس الجهاز' : 'Two Players';
+  String get threeLevels =>
+      isArabic ? '٣ مستويات — سهل، وسط، صعب' : '3 levels — easy, medium, hard';
+  String get sameDevice =>
+      isArabic ? 'نفس الجهاز، وجهاً لوجه' : 'Same device, face to face';
   String get chooseBoard =>
       isArabic ? 'اختر حجم اللوحة' : 'Choose Board Size';
   String get board5 => isArabic ? 'لوحة 5×5 — سريعة' : 'Board 5×5 — Quick';
   String get board7 => isArabic ? 'لوحة 7×7 — طويلة' : 'Board 7×7 — Long';
+  String get board5Short => isArabic ? '5×5 سريعة' : '5×5 Quick';
+  String get board7Short => isArabic ? '7×7 طويلة' : '7×7 Long';
+  String get quick => isArabic ? 'سريعة' : 'Quick';
+  String get long => isArabic ? 'طويلة' : 'Long';
   String get chooseDifficulty =>
       isArabic ? 'اختر مستوى الكمبيوتر' : 'Choose Difficulty';
   String get easy => isArabic ? 'سهل' : 'Easy';
@@ -37,6 +45,15 @@ class Strings {
       isArabic ? 'اختر حجر اللاعب 2' : 'Choose Player 2 Stone';
   String get computerStone =>
       isArabic ? 'اختر حجرك (الكمبيوتر ياخد التاني)' : 'Choose your stone';
+  String get chooseYourStoneFirst =>
+      isArabic ? 'اختر حجرك أولاً' : 'Choose your stone first';
+  String get chooseOpponentStoneFirst => isArabic
+      ? 'اختر حجر الخصم'
+      : 'Choose the opponent\u2019s stone';
+  String get chooseStoneP1First =>
+      isArabic ? 'اختر حجر اللاعب 1' : 'Choose Player 1\u2019s stone';
+  String get chooseStoneP2First =>
+      isArabic ? 'اختر حجر اللاعب 2' : 'Choose Player 2\u2019s stone';
   String get startPlaying => isArabic ? 'أبدأ اللعب' : 'Start Playing';
   String get placeStones =>
       isArabic ? 'ضع 3 أحجار في أي خانة فاضية (ما عدا الوسطى)' : 'Place 3 stones on any empty square (not the centre)';
@@ -56,12 +73,21 @@ class Strings {
   String get remaining => isArabic ? 'باقي' : 'Left';
   String get hint => isArabic ? 'تلميح' : 'Hint';
   String get undo => isArabic ? 'تراجع' : 'Undo';
+  String get menu => isArabic ? 'القائمة' : 'Menu';
   String get newGame => isArabic ? 'لعبة جديدة' : 'New Game';
   String get home => isArabic ? 'الرئيسية' : 'Home';
   String get victory => isArabic ? 'مبروووك!' : 'Victory!';
   String get youWon => isArabic ? 'فزت! شغل نضيف والله' : 'You won! Well played';
   String get computerWon =>
       isArabic ? 'الكمبيوتر فاز، جرّب تاني' : 'Computer won — try again';
+  String get youLost =>
+      isArabic ? 'خسرت هالمرة' : 'You lost this time';
+  String get tryAgainLine => isArabic
+      ? 'ما مشكلة — المرة الجاية ليك، ركّز على الوسطى'
+      : 'No worries — next time is yours. Watch the centre.';
+  String get drawLine => isArabic
+      ? 'تعادل — متساويين في الدهاء'
+      : 'A draw — evenly matched in wit.';
   String playerWon(String name) =>
       isArabic ? '$name فاز!' : '$name wins!';
   String get draw => isArabic ? 'تعادل!' : 'Draw!';
@@ -81,6 +107,19 @@ class Strings {
   String get losses => isArabic ? 'خسارة' : 'Losses';
   String get draws => isArabic ? 'تعادل' : 'Draws';
   String get sound => isArabic ? 'الصوت' : 'Sound';
+  String get volume => isArabic ? 'مستوى الصوت' : 'Volume';
+  String get haptics => isArabic ? 'الاهتزاز' : 'Haptics';
+  String get language => isArabic ? 'اللغة' : 'Language';
+  String get arabic => isArabic ? 'العربية' : 'Arabic';
+  String get english => isArabic ? 'الإنجليزية' : 'English';
+  String get settings => isArabic ? 'الإعدادات' : 'Settings';
+  String get pause => isArabic ? 'إيقاف مؤقت' : 'Paused';
+  String get resume => isArabic ? 'واصل اللعب' : 'Resume';
+  String get restart => isArabic ? 'أعد اللعب' : 'Restart';
+  String get leaveGame => isArabic ? 'اطلع من اللعبة' : 'Leave game';
+  String get soundOn => isArabic ? 'الصوت شغال' : 'Sound on';
+  String get soundOff => isArabic ? 'الصوت مقفول' : 'Sound off';
+  String get letsPlay => isArabic ? 'يلا نلعب!' : 'Let\u2019s play!';
   String get howToPlayBody => isArabic
       ? '1) كل لاعب يوزّع حجاره: 3 أحجار في كل دور، في أي خانة فاضية ما عدا الخانة الوسطى — الوسطى تفضل فاضية لأن أول حركة في اللعبة تكون إليها.\n\n'
           '2) بعد التوزيع، حرّك حجر واحد خطوة واحدة أفقي أو عمودي لخانة فاضية، والوسطى مسموحة.\n\n'
@@ -104,8 +143,30 @@ class Strings {
   String get selectStoneFirst =>
       isArabic ? 'اضغط على حجرك أولاً' : 'Tap one of your stones first';
   String get placementDone =>
-      isArabic ? 'التوزيع اكتمل — يلا نلعب!' : 'Placement done — let\'s play!';
+      isArabic ? 'التوزيع اكمل — يلا نلعب!' : 'Placement done — let\u2019s play!';
   String get passTurn => isArabic
       ? 'ما عندك حركة — الدور مرّر للخصم'
       : 'No moves — turn passed to the opponent';
+
+  // ---- صفحات طريقة اللعب (3 صفحات) ----
+  String get howPage1Title => isArabic ? '١. التوزيع' : '1. Placement';
+  String get howPage1Body => isArabic
+      ? 'كل لاعب يضع 3 أحجار في كل دور، في أي خانة فاضية ما عدا الخانة الوسطى. الوسطى تفضل فاضية لأن أول حركة في اللعبة تكون إليها.'
+      : 'Each player places 3 stones per turn on any empty square except the centre. The centre stays empty because the first move of the game goes there.';
+  String get howPage2Title => isArabic ? '٢. الحركة' : '2. Movement';
+  String get howPage2Body => isArabic
+      ? 'بعد اكتمال التوزيع، حرّك حجراً واحداً خطوة واحدة أفقياً أو عمودياً إلى خانة فاضية. الوسطى مسموحة كوجهة.'
+      : 'After placement, move one stone a single step horizontally or vertically to an empty square. The centre is allowed as a destination.';
+  String get howPage3Title => isArabic ? '٣. الأكل والفوز' : '3. Capture & win';
+  String get howPage3Body => isArabic
+      ? 'إذا حصرت حجر خصم بين حجرين من حجارتك تأكله. الوسطى بلا حماية. من يترك خصمه بلا أي حجر يفوز، ومن بلا حركة يُمرَّر دوره.'
+      : 'If you sandwich an enemy stone between two of yours, it is eaten. The centre has no protection. Leave your opponent with no stones to win; a player with no move passes the turn.';
+
+  // ---- تسميات الوصول للوحة (لقرّاء الشاشة) ----
+  String tileLabel(int row, int col) =>
+      isArabic ? 'صف ${row + 1}، عمود ${col + 1}' : 'Row ${row + 1}, column ${col + 1}';
+  String get tileEmpty => isArabic ? 'خانة فاضية' : 'Empty square';
+  String get tileYourStone => isArabic ? 'حجرك' : 'Your stone';
+  String get tileOpponentStone => isArabic ? 'حجر الخصم' : 'Opponent stone';
+  String get tileCentre => isArabic ? 'الخانة الوسطى' : 'Centre square';
 }
