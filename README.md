@@ -1,16 +1,61 @@
-# myapp
+# السيجا السودانية 🇸🇩
 
-A new Flutter project.
+لعبة السيجا التراثية المشهورة في السودان ومصر، أعيد تطويرها بـ Flutter.
 
-## Getting Started
+## ما الجديد في v2.0 (نوفمبر 2026 — بقواعد v1.0 الأصلية محفوظة كما هي)
 
-This project is a starting point for a Flutter application.
+- **لعب ضد الكمبيوتر بثلاثة مستويات:**
+  - **سهل** — حركة عشوائية غالباً، يلتقط الأكل الواضح أحياناً فقط.
+  - **وسط** — جشع: يأكل متى أمكن ويتجنب تعليق حجره، ويعاقب الغلطات الواضحة.
+  - **صعب** — Minimax مع Alpha-Beta (عمق 4 على 5×5، وعمق 3 على 7×7) وتقييم يشمل المادة والحركة والوسطى والتهديدات.
+- **طابع سوداني:** ألوان النيل والرمل النوبي، شريط زخرفة نوبية، ونصوص بلهجة سودانية خفيفة.
+- **متعة لعب:** حركات (تحديد ذهبي، نقاط للخانات المتاحة، تظليل آخر حركة، تكبير الحجر المحدد)، أصوات جديدة (طبلة للتوزيع، فوز/خسارة/خطأ)، واهتزاز عند الأكل، وزر **تلميح** وزر **تراجع** ضد الكمبيوتر، وعدّاد نتيجة الجلسة.
+- **إصلاحات:**
+  - شاشة الفوز كانت تسمّي الفائز الغلط (الدور يتبدل قبل التحقق) — الآن الفائز من `engine.winner()` مباشرة.
+  - **القواعد الأصلية محفوظة كما هي بأمر المستخدم، بلا أي تغيير:** التوزيع 3 أحجار في كل دور، الوسطى فاضية أثناء التوزيع لأن أول حركة إليها، الأكل بالحصار كما في الأصل بلا حماية خاصة للوسطى، والفوز بأكل كل حجارة الخصم (صفر).
+  - زر «عن اللعبة» كان مثبتاً على ارتفاع 490 ويخرب على الشاشات الأخرى — التخطيط الآن متجاوب بالكامل.
+  - `AudioPlayer` يُغلق في `dispose`، وشاشة البداية تتحقق من `mounted`.
+  - `url_launcher` بالواجهة الحديثة `launchUrl`، و`WillPopScope` استُبدل بـ `PopScope`.
+  - الاختبار الافتراضي (عدّاد غير موجود) استُبدل باختبارات حقيقية للمحرك والذكاء.
+  - كل الأصول مسجلة في `pubspec.yaml` (كان `ANIMSEJA.gif` و`seega_logo.png` ناقصين).
 
-A few resources to get you started if this is your first Flutter project:
+## القواعد (الأصلية من v1.0 — لم تتغير)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+1. التوزيع: 3 أحجار في كل دور، في أي خانة فاضية ما عدا الوسطى، حتى تكتمل الحجارة (12 لكل لاعب على 5×5، و24 على 7×7). الوسطى تفضل فاضية لأن أول حركة في اللعبة تكون إليها.
+2. الحركة: خطوة واحدة أفقية أو عمودية إلى خانة فاضية (الوسطى مسموحة).
+3. الأكل: إذا حركت حجرك فحصرت حجر خصم بين حجرين من حجارتك (أفقي أو عمودي)، يُؤكل. الدخول بين حجرَي خصم آمن.
+4. الوسطى بلا حماية خاصة: الحجر فيها يؤكل كأي حجر آخر إذا حُصر.
+5. الفوز: من يأكل كل حجارة خصمه (يتركه بلا أي حجر). ومن بلا أي حركة يُمرَّر دوره للخصم، وإذا انحصر اللاعبان معاً يفوز صاحب الحجارة الأكثر.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## بنية الكود
+
+```
+lib/
+  main.dart                  # الدخول + شاشة البداية
+  game/
+    seega_engine.dart        # محرك اللعبة — Dart نقي (بلا Flutter) وقابل للاختبار
+    seega_ai.dart            # ذكاء الكمبيوتر — Dart نقي
+    sound_manager.dart       # الأصوات
+  theme/sudanese_theme.dart  # الألوان والزخرفة النوبية
+  l10n/strings.dart          # عربي (سوداني) + إنجليزي
+  screens/
+    home_screen.dart         # الرئيسية + الإعداد
+    game_screen.dart         # اللوحة واللعب
+test/
+  seega_engine_test.dart     # 9 اختبارات للقواعد الأصلية
+  seega_ai_test.dart         # 5 اختبارات للذكاء
+  widget_test.dart           # اختبار دخول التطبيق
+```
+
+## التشغيل والاختبار
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --release   # يحتاج Android SDK؛ أو عبر GitHub Actions
+```
+
+## البناء على GitHub
+
+المستودع فيه `.github/workflows/build-apk.yml`: عند كل push على `main` يعمل فحص `flutter analyze` والاختبارات، ثم يبني APK، ويظهر في تبويب Actions ← Artifacts تحت اسم `alseeja-apk`. بلا حاجة لـ Android SDK على جهازك.

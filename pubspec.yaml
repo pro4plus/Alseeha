@@ -1,18 +1,22 @@
 name: alseeja
-description: لعبة Seega باستخدام Flutter
-version: 1.0.0+1
+description: لعبة السيجا السودانية باستخدام Flutter — لعب ضد الكمبيوتر بثلاثة مستويات أو لاعبين
+version: 2.0.0+1
 
 environment:
-  sdk: ">=2.19.0 <3.0.0"
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  just_audio: ^0.9.34
+  just_audio: ^0.9.39
   url_launcher: ^6.3.1
 
 dev_dependencies:
-  flutter_launcher_icons: ^0.10.0
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.0
 
 flutter_icons:
   android: true
@@ -32,6 +36,14 @@ flutter:
     - assets/blue_stone.png
     - assets/nubax.png
     - assets/seja.png
+    - assets/seega_logo.png
+    - assets/ANIMSEJA.gif
     - assets/tiktok.png
     - assets/sounds/move.mp3
     - assets/sounds/eat.mp3
+    - assets/sounds/place.wav
+    - assets/sounds/select.wav
+    - assets/sounds/start.wav
+    - assets/sounds/win.wav
+    - assets/sounds/lose.wav
+    - assets/sounds/invalid.wav
