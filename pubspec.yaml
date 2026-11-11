@@ -1,0 +1,37 @@
+name: alseeja
+description: لعبة Seega باستخدام Flutter
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.19.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio: ^0.9.34
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.10.0
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/seega_logo.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/yellow_stone.png
+    - assets/gray_stone.png
+    - assets/turquoise_stone.png
+    - assets/red_stone.png
+    - assets/green_stone.png
+    - assets/brown_stone.png
+    - assets/blue_stone.png
+    - assets/nubax.png
+    - assets/seja.png
+    - assets/tiktok.png
+    - assets/sounds/move.mp3
+    - assets/sounds/eat.mp3
