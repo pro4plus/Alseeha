@@ -212,7 +212,13 @@ class _BoardViewState extends State<BoardView>
         builder: (context, constraints) {
           final boardPx = math.min(
               constraints.maxWidth, constraints.maxHeight);
-          final cell = boardPx / size;
+          // اللوحة لها حشوة 8px من كل جهة (padding في الحاوية)،
+          // فالخلية تُحسب من المساحة الداخلية (boardPx − 16).
+          // حسابها من boardPx كاملاً كان يزيح الحجارة عن مربعاتها
+          // بمقدار يصل إلى ~14px فتخرج من المربع، ويجعل النقر
+          // على الحجر الظاهر يقع في المربع المجاور.
+          final innerPx = boardPx - 16;
+          final cell = innerPx / size;
           final sel = widget.controller.selectedTile;
           final lastMove = engine.lastMove;
 
@@ -267,6 +273,10 @@ class _BoardViewState extends State<BoardView>
                                   lastMove.fromCol == c) ||
                               (lastMove.toRow == r &&
                                   lastMove.toCol == c));
+                      // المربع المحدد يأخذ إطاراً ذهبياً واضحاً حتى
+                      // يعرف اللاعب أي حجر ضغط عليه بالضبط.
+                      final isSelected =
+                          sel != null && sel[0] == r && sel[1] == c;
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () => widget.onTapTile(r, c),
@@ -295,13 +305,18 @@ class _BoardViewState extends State<BoardView>
                                             const Color(0xFFC9A672),
                                           ],
                               ),
-                              border: isLast
+                              border: isSelected
                                   ? Border.all(
-                                      color: SudaneseTheme.nile
-                                          .withValues(alpha: 0.8),
-                                      width: 2,
+                                      color: SudaneseTheme.gold,
+                                      width: 3,
                                     )
-                                  : null,
+                                  : isLast
+                                      ? Border.all(
+                                          color: SudaneseTheme.nile
+                                              .withValues(alpha: 0.8),
+                                          width: 2,
+                                        )
+                                      : null,
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black
@@ -309,57 +324,70 @@ class _BoardViewState extends State<BoardView>
                                   blurRadius: 3,
                                   offset: const Offset(0, 2),
                                 ),
+                                if (isSelected)
+                                  BoxShadow(
+                                    color: SudaneseTheme.gold
+                                        .withValues(alpha: 0.55),
+                                    blurRadius: 10,
+                                    spreadRadius: 1,
+                                  ),
                               ],
                             ),
-                            child: isCentre && isCentreEmpty
-                                ? AnimatedBuilder(
-                                    animation: _glowController,
+                            // النجمة في الوسطى، ونقطة الوجهة فوقها
+                            // إن كانت الوسطى وجهة قانونية أيضاً.
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                if (isCentre && isCentreEmpty)
+                                  Positioned.fill(
+                                    child: AnimatedBuilder(
+                                      animation: _glowController,
+                                      builder: (context, child) {
+                                        final t = _glowController.value;
+                                        final glow =
+                                            (math.sin(t * math.pi * 2) +
+                                                    1) /
+                                                2;
+                                        return CustomPaint(
+                                          painter: NubianStarPainter(
+                                            color: SudaneseTheme.nile
+                                                .withValues(alpha: 0.75),
+                                            glow: 0.3 + glow * 0.7,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                if (isDest)
+                                  AnimatedBuilder(
+                                    animation: _pulseController,
                                     builder: (context, child) {
-                                      final t = _glowController.value;
-                                      final glow =
-                                          (math.sin(t * math.pi * 2) +
-                                                  1) /
-                                              2;
-                                      return CustomPaint(
-                                        painter: NubianStarPainter(
-                                          color: SudaneseTheme.nile
-                                              .withValues(alpha: 0.75),
-                                          glow: 0.3 + glow * 0.7,
+                                      final s = 0.9 +
+                                          _pulseController.value *
+                                              0.2;
+                                      return Transform.scale(
+                                        scale: s,
+                                        child: Container(
+                                          width: cell * 0.34,
+                                          height: cell * 0.34,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: SudaneseTheme
+                                                .palm
+                                                .withValues(
+                                                    alpha: 0.55),
+                                            border: Border.all(
+                                              color: SudaneseTheme
+                                                  .palm,
+                                              width: 2,
+                                            ),
+                                          ),
                                         ),
                                       );
                                     },
-                                  )
-                                : isDest
-                                    ? AnimatedBuilder(
-                                        animation: _pulseController,
-                                        builder: (context, child) {
-                                          final s = 0.9 +
-                                              _pulseController.value *
-                                                  0.2;
-                                          return Center(
-                                            child: Transform.scale(
-                                              scale: s,
-                                              child: Container(
-                                                width: cell * 0.34,
-                                                height: cell * 0.34,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: SudaneseTheme
-                                                      .palm
-                                                      .withValues(
-                                                          alpha: 0.55),
-                                                  border: Border.all(
-                                                    color: SudaneseTheme
-                                                        .palm,
-                                                    width: 2,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      )
-                                    : null,
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -405,7 +433,7 @@ class _BoardViewState extends State<BoardView>
                         final to = Offset(
                             (m.toCol + 0.5) * cell, (m.toRow + 0.5) * cell);
                         final pos = Offset.lerp(from, to, t)!;
-                        final stonePx = cell * 0.82;
+                        final stonePx = cell * 0.78;
                         return Positioned(
                           left: pos.dx - stonePx / 2,
                           top: pos.dy - stonePx / 2,
@@ -424,7 +452,7 @@ class _BoardViewState extends State<BoardView>
                       builder: (context, child) {
                         final t = _captureController.value;
                         final captured = _capturingMove!.captured;
-                        final stonePx = cell * 0.82;
+                        final stonePx = cell * 0.78;
                         final widgets = <Widget>[];
                         for (var i = 0; i < captured.length; i++) {
                           final sq = captured[i];
@@ -560,7 +588,7 @@ class _BoardViewState extends State<BoardView>
   List<Widget> _buildStones(int size, double cell, List<int>? sel) {
     final engine = widget.engine;
     final widgets = <Widget>[];
-    final stonePx = cell * 0.82;
+    final stonePx = cell * 0.78;
     for (var r = 0; r < size; r++) {
       for (var c = 0; c < size; c++) {
         final value = engine.board[r][c];
@@ -694,7 +722,13 @@ class _BoardViewState extends State<BoardView>
         widgets.add(Positioned(
           left: cx - stonePx / 2,
           top: cy - stonePx / 2,
-          child: stone,
+          // النقر على الحجر نفسه يختار ذلك الحجر مباشرة،
+          // فلا يعتمد الأمر على سقوط النقرة إلى المربع تحته.
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => widget.onTapTile(r, c),
+            child: stone,
+          ),
         ));
       }
     }

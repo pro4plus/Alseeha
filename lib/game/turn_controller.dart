@@ -28,6 +28,11 @@ enum ControllerEvent {
   placementEnded,
   gameOver,
   undo,
+  // اختيار/إلغاء اختيار حجر (لا حركة فيه، لكن الواجهة يجب أن
+  // تعيد الرسم لتظهر الإطار الذهبي والوجهات).
+  selected,
+  // انتهت حركة الانزلاق واستقر الدور على اللاعب التالي.
+  turnChanged,
 }
 
 /// لقطة كاملة لحالة اللعبة للتراجع (ضد الكمبيوتر فقط).
@@ -180,6 +185,7 @@ class TurnController extends ChangeNotifier {
     if (selectedTile == null) {
       if (value == me) {
         selectedTile = [row, col];
+        _emit(ControllerEvent.selected);
         SoundManager.instance.select();
         Haptics.select();
         notifyListeners();
@@ -188,11 +194,13 @@ class TurnController extends ChangeNotifier {
     }
     if (selectedTile![0] == row && selectedTile![1] == col) {
       selectedTile = null;
+      _emit(ControllerEvent.selected);
       notifyListeners();
       return;
     }
     if (value == me) {
       selectedTile = [row, col];
+      _emit(ControllerEvent.selected);
       SoundManager.instance.select();
       Haptics.select();
       notifyListeners();
@@ -255,7 +263,16 @@ class TurnController extends ChangeNotifier {
       }
     }
     _checkDraw();
-    if (winner == null) _settle();
+    if (winner == null) {
+      final before = eventNonce;
+      _settle();
+      // استقرار الدور بعد الحركة يغيّر اللاعب النشط، فيجب أن
+      // تعيد الواجهة الرسم (اللافتة وشارة «الدور») — إلا إذا كان
+      // الاستقرار نفسه قد أصدر حدثاً أوضح (تمرير أو نهاية لعبة).
+      if (eventNonce == before) {
+        _emit(ControllerEvent.turnChanged);
+      }
+    }
     notifyListeners();
   }
 
