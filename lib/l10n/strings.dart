@@ -64,6 +64,7 @@ class Strings {
   String get computerThinking =>
       isArabic ? 'الكمبيوتر بيفكّر…' : 'Computer is thinking…';
   String get yourTurn => isArabic ? 'دورك' : 'Your turn';
+  String get turnBadge => isArabic ? 'الدور' : 'Turn';
   String get player1 => isArabic ? 'اللاعب 1' : 'Player 1';
   String get player2 => isArabic ? 'اللاعب 2' : 'Player 2';
   String get you => isArabic ? 'أنت' : 'You';
