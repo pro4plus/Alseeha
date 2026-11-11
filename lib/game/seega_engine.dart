@@ -48,6 +48,20 @@ class SeegaMove {
   int get hashCode => Object.hash(fromRow, fromCol, toRow, toCol);
 }
 
+/// نتيجة حركة مطبقة: الحركة نفسها + قائمة الخانات المأكولة + عددها.
+/// (v3.0: إضافة فقط لتمكين حركات اللوحة — لا تغيير في أي قاعدة.)
+class MoveResult {
+  final SeegaMove move;
+  final int mover;
+  final List<List<int>> captured;
+  int get eaten => captured.length;
+  const MoveResult({
+    required this.move,
+    required this.mover,
+    required this.captured,
+  });
+}
+
 class SeegaEngine {
   final int size;
   final int stonesPerPlayer;
@@ -227,6 +241,39 @@ class SeegaEngine {
     }
     currentPlayer = 3 - currentPlayer;
     return eaten;
+  }
+
+  /// يطبق التحرك مثل applyMove تماماً، لكنه يعيد أيضاً قائمة الخانات
+  /// المأكولة ومسار الحركة لتمكين الحركات في الواجهة.
+  /// يعيد null إذا كانت الحركة غير قانونية.
+  MoveResult? applyMoveDetailed(SeegaMove move) {
+    if (placingPhase) return null;
+    final player = board[move.fromRow][move.fromCol];
+    if (player == 0 || player != currentPlayer) return null;
+    if ((move.fromRow - move.toRow).abs() +
+            (move.fromCol - move.toCol).abs() !=
+        1) {
+      return null;
+    }
+    if (!inBounds(move.toRow, move.toCol) ||
+        board[move.toRow][move.toCol] != 0) {
+      return null;
+    }
+    // احسب الخانات المأكولة قبل التطبيق (نفس منطق applyMove).
+    final opponent = 3 - player;
+    final captured = <List<int>>[];
+    for (final d in dirs) {
+      final r1 = move.toRow + d[0], c1 = move.toCol + d[1];
+      final r2 = move.toRow + 2 * d[0], c2 = move.toCol + 2 * d[1];
+      if (!inBounds(r1, c1) || !inBounds(r2, c2)) continue;
+      if (board[r1][c1] == opponent && board[r2][c2] == player) {
+        captured.add([r1, c1]);
+      }
+    }
+    final eaten = applyMove(move);
+    if (eaten < 0) return null;
+    assert(eaten == captured.length);
+    return MoveResult(move: move, mover: player, captured: captured);
   }
 
   /// مفتاح نصي للوضع الحالي (اللوحة + الدور) لتتبع التكرار:
