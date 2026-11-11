@@ -110,6 +110,8 @@ class _GameScreenState extends State<GameScreen>
           break;
         case ControllerEvent.gameOver:
         case ControllerEvent.undo:
+        case ControllerEvent.selected:
+        case ControllerEvent.turnChanged:
         case null:
           break;
       }
@@ -403,8 +405,8 @@ class _GameScreenState extends State<GameScreen>
         borderRadius:
             BorderRadius.circular(SudaneseTheme.radiusCard),
         border: isActive
-            ? Border.all(color: SudaneseTheme.gold, width: 2)
-            : Border.all(color: Colors.transparent, width: 2),
+            ? Border.all(color: SudaneseTheme.gold, width: 3)
+            : Border.all(color: Colors.transparent, width: 3),
         boxShadow: isActive
             ? [
                 BoxShadow(
@@ -478,6 +480,45 @@ class _GameScreenState extends State<GameScreen>
               ],
             ),
           ),
+          if (isActive)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: SudaneseTheme.gold,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: SudaneseTheme.softShadow(opacity: 0.25),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedBuilder(
+                    animation: _breath,
+                    builder: (context, child) => Opacity(
+                      opacity: 0.55 + _breath.value * 0.45,
+                      child: child,
+                    ),
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    s.turnBadge,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (engine.placingPhase && remainingToPlace > 0)
             SizedBox(
               width: 110,
@@ -498,7 +539,7 @@ class _GameScreenState extends State<GameScreen>
     );
 
     final dimmed = Opacity(
-      opacity: isActive ? 1.0 : 0.7,
+      opacity: isActive ? 1.0 : 0.55,
       child: card,
     );
     if (rotate) {
@@ -515,7 +556,6 @@ class _GameScreenState extends State<GameScreen>
     final activeAsset = engine.currentPlayer == 1
         ? widget.config.p1Asset
         : widget.config.p2Asset;
-    final activeColor = SudaneseTheme.stoneColor(activeAsset);
 
     String text;
     if (controller.phase == TurnPhase.gameOver) {
@@ -555,29 +595,22 @@ class _GameScreenState extends State<GameScreen>
           padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: SudaneseTheme.surface,
+            color: SudaneseTheme.gold.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: SudaneseTheme.gold, width: 2),
             boxShadow: SudaneseTheme.softShadow(opacity: 0.08),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: activeColor,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
+              Image.asset(activeAsset, width: 30, height: 30),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   text,
                   style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
                     color: SudaneseTheme.ink,
                   ),
                   textAlign: TextAlign.center,
