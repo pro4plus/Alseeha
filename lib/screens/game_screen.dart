@@ -1,7 +1,8 @@
-// شاشة اللعب v3.0: مبنية حول TurnController + BoardView.
-// شريط علوي رفيع، بطاقتا لاعب، لافتة دور، لوحة، رصيف سفلي،
-// قائمة إيقاف، وشاشة نتيجة كاملة مع قصاصات.
+// شاشة اللعب v4: البرش كامل الشاشة. مقعد الخصم أعلى،
+// لوحة الرمل في الوسط، سطر الدور نصاً بلا صندوق،
+// صحون الطين والفوانيس، وصفحة النتيجة المقوّسة.
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -11,25 +12,32 @@ import '../game/turn_controller.dart';
 import '../l10n/strings.dart';
 import '../services/settings_store.dart';
 import '../theme/sudanese_theme.dart';
-import '../ui/board_view.dart';
-import '../ui/effects/confetti.dart';
-import '../ui/pressable_button.dart';
-import '../ui/settings_sheet.dart';
-import 'home_screen.dart';
+import '../ui/painters/confetti.dart';
+import '../ui/painters/elder.dart';
+import '../ui/painters/lantern.dart';
+import '../ui/painters/mat.dart';
+import '../ui/painters/pebble.dart';
+import '../ui/painters/tabaq.dart';
+import '../ui/sand_board.dart';
+import '../ui/sheets.dart';
+import '../ui/widgets/arched_sheet.dart';
+import '../ui/widgets/bowl_counter.dart';
+import '../ui/widgets/plank_button.dart';
+import '../ui/widgets/wood_token.dart';
 
 class GameConfig {
   final int boardSize;
   final bool vsComputer;
   final Difficulty difficulty;
-  final String p1Asset;
-  final String p2Asset;
+  final int p1Pebble;
+  final int p2Pebble;
 
   const GameConfig({
     required this.boardSize,
     required this.vsComputer,
     this.difficulty = Difficulty.medium,
-    required this.p1Asset,
-    required this.p2Asset,
+    required this.p1Pebble,
+    required this.p2Pebble,
   });
 }
 
@@ -51,7 +59,8 @@ class _GameScreenState extends State<GameScreen>
   final BoardFx _fx = BoardFx();
   int _seenNonce = 0;
 
-  late final AnimationController _breath;
+  late final AnimationController _tilt;
+  late final AnimationController _bow;
   String? _pill;
   Timer? _pillTimer;
 
@@ -67,16 +76,21 @@ class _GameScreenState extends State<GameScreen>
           difficulty: widget.config.difficulty,
         );
     _controller.addListener(_onControllerEvent);
-    _breath = AnimationController(
+    _tilt = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
+      duration: const Duration(seconds: 2),
+    )..repeat();
+    _bow = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
   }
 
   @override
   void dispose() {
     _pillTimer?.cancel();
-    _breath.dispose();
+    _tilt.dispose();
+    _bow.dispose();
     _controller.removeListener(_onControllerEvent);
     if (widget.debugController == null) _controller.dispose();
     super.dispose();
@@ -109,6 +123,10 @@ class _GameScreenState extends State<GameScreen>
           _showPill(s.passTurn);
           break;
         case ControllerEvent.gameOver:
+          if (_controller.winner == 1) {
+            _bow.forward(from: 0);
+          }
+          break;
         case ControllerEvent.undo:
         case ControllerEvent.selected:
         case ControllerEvent.turnChanged:
@@ -126,7 +144,7 @@ class _GameScreenState extends State<GameScreen>
     });
   }
 
-  void _onTileTap(int r, int c) {
+  void _onPitTap(int r, int c) {
     if (_controller.isPlacing) {
       _controller.placeStone(r, c);
     } else {
@@ -144,63 +162,50 @@ class _GameScreenState extends State<GameScreen>
     }
   }
 
-  Future<void> _confirmLeave() async {
-    final leave = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ConfirmSheet(
-        strings: s,
-        title: s.exitQuestion,
-        confirmLabel: s.yes,
-        cancelLabel: s.no,
-      ),
-    );
-    if (leave == true && mounted) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  void _showPauseMenu() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _PauseMenuSheet(
-        strings: s,
-        onResume: () => Navigator.of(context).pop(),
-        onRestart: () {
-          Navigator.of(context).pop();
-          _controller.restart();
-          setState(() {
-            _fx.move = null;
-            _fx.hintMove = null;
-          });
-        },
-        onSettings: () {
-          Navigator.of(context).pop();
-          SettingsSheet.show(context, s);
-        },
-        onHowToPlay: () {
-          Navigator.of(context).pop();
-          showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => HowToPlaySheet(strings: s),
-          );
-        },
-        onLeave: () async {
-          Navigator.of(context).pop();
-          await _confirmLeave();
-        },
-      ),
-    );
-  }
-
   String _nameFor(int player) {
     if (!widget.config.vsComputer) {
       return player == 1 ? s.player1 : s.player2;
     }
     return player == 1 ? s.you : s.computer;
+  }
+
+  ElderKind _kindFor(Difficulty d) {
+    switch (d) {
+      case Difficulty.easy:
+        return ElderKind.young;
+      case Difficulty.medium:
+        return ElderKind.teacher;
+      case Difficulty.hard:
+        return ElderKind.elder;
+    }
+  }
+
+  int _capturedOf(int player) {
+    final engine = _controller.engine;
+    if (engine.placingPhase) return 0;
+    return engine.stonesPerPlayer - engine.count(3 - player);
+  }
+
+  int _leftOf(int player) {
+    final engine = _controller.engine;
+    if (engine.placingPhase) return engine.remainingToPlace(player);
+    return engine.count(player);
+  }
+
+  String _turnLine() {
+    final controller = _controller;
+    final engine = controller.engine;
+    if (controller.phase == TurnPhase.gameOver) return '';
+    if (engine.placingPhase) {
+      if (widget.config.vsComputer && engine.currentPlayer == 2) {
+        return s.computerPlacing;
+      }
+      if (widget.config.vsComputer) return s.yourTurnPlace;
+      return '${s.turnOf(_nameFor(engine.currentPlayer))} — ${s.placeThree}';
+    }
+    if (controller.isAiThinking) return s.computerThinking;
+    if (widget.config.vsComputer) return s.turnLineChoose;
+    return s.turnOf(_nameFor(engine.currentPlayer));
   }
 
   @override
@@ -215,529 +220,450 @@ class _GameScreenState extends State<GameScreen>
         builder: (context, child) {
           final controller = _controller;
           final engine = controller.engine;
-          final isLoss = controller.phase == TurnPhase.gameOver &&
-              widget.config.vsComputer &&
-              controller.winner == 2;
+          final isGameOver = controller.phase == TurnPhase.gameOver;
+
           final content = Scaffold(
-            body: SudaneseTheme.gradientBackground(
-              child: SafeArea(
-                child: Stack(
-                  children: [
-                    Column(
-                      children: [
-                        _topBar(),
-                        const SizedBox(height: 6),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16),
-                          child: _playerCard(
-                            player: 2,
-                            rotate: !widget.config.vsComputer,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _turnBanner(),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: Center(
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                const RepaintBoundary(
+                  child: CustomPaint(
+                    painter: MatPainter(topThread: true, fringe: true),
+                  ),
+                ),
+                SafeArea(
+                  child: Column(
+                    children: [
+                      _topTokens(),
+                      const SizedBox(height: 2),
+                      _opponentBlock(),
+                      const SizedBox(height: 4),
+                      // ---- اللوحة ----
+                      Expanded(
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: 366,
+                              maxHeight: 366,
+                            ),
                             child: AspectRatio(
                               aspectRatio: 1,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16),
-                                child: BoardView(
-                                  engine: engine,
-                                  controller: controller,
-                                  fx: _fx,
-                                  p1Asset: widget.config.p1Asset,
-                                  p2Asset: widget.config.p2Asset,
-                                  strings: s,
-                                  onTapTile: _onTileTap,
-                                  onFxDone: () =>
-                                      controller.finishAnimation(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16),
-                          child: _playerCard(player: 1),
-                        ),
-                        const SizedBox(height: 10),
-                        _bottomDock(),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                    // رسالة عائمة.
-                    if (_pill != null)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: MediaQuery.of(context).size.height * 0.42,
-                        child: Center(
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.8, end: 1.0),
-                            duration:
-                                const Duration(milliseconds: 300),
-                            curve: Curves.easeOutBack,
-                            builder: (context, scale, child) =>
-                                Transform.scale(
-                              scale: scale,
-                              child: child,
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 18, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: SudaneseTheme.ink
-                                    .withValues(alpha: 0.85),
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: SudaneseTheme.softShadow(),
-                              ),
-                              child: Text(
-                                _pill!,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
+                              child: SandBoard(
+                                engine: engine,
+                                controller: controller,
+                                fx: _fx,
+                                p1Pebble: widget.config.p1Pebble,
+                                p2Pebble: widget.config.p2Pebble,
+                                strings: s,
+                                onTapPit: _onPitTap,
+                                onFxDone: () =>
+                                    controller.finishAnimation(),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    // شاشة النتيجة.
-                    if (controller.phase == TurnPhase.gameOver)
-                      _resultOverlay(),
-                  ],
+                      const SizedBox(height: 6),
+                      _turnLineWidget(),
+                      const SizedBox(height: 6),
+                      _playerZone(),
+                      const SizedBox(height: 4),
+                      _nameRow(),
+                      const SizedBox(height: 6),
+                    ],
+                  ),
                 ),
-              ),
+                // رسالة عائمة.
+                if (_pill != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: MediaQuery.of(context).size.height * 0.42,
+                    child: Center(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.8, end: 1.0),
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutBack,
+                        builder: (context, scale, child) =>
+                            Transform.scale(scale: scale, child: child),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: SudaneseTheme.earthBlack
+                                .withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Text(
+                            _pill!,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // شاشة النتيجة.
+                if (isGameOver) _resultOverlay(),
+              ],
             ),
           );
-          if (!isLoss) return content;
-          // الخسارة: إشباع منخفض للوحة خلف النتيجة.
-          return ColorFiltered(
-            colorFilter: const ColorFilter.matrix([
-              0.2126, 0.7152, 0.0722, 0, 0,
-              0.2126, 0.7152, 0.0722, 0, 0,
-              0.2126, 0.7152, 0.0722, 0, 0,
-              0, 0, 0, 1, 0,
-            ]),
-            child: content,
-          );
+          return content;
         },
       ),
     );
   }
 
-  // ---------------------------------------------------------- الشريط العلوي
+  // ---------------------------------------------------------- الأزرار العلوية
 
-  Widget _topBar() {
+  Widget _topTokens() {
     final settings = AppSettings.instance;
-    return SizedBox(
-      height: 56,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            onPressed: _showPauseMenu,
-            icon: const Icon(Icons.pause,
-                color: SudaneseTheme.ink),
-            tooltip: s.pause,
-          ),
-          Expanded(
-            child: Text(
-              s.appTitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w900,
-                color: SudaneseTheme.ink,
-              ),
-            ),
-          ),
-          IconButton(
+          // الترتيب RTL: الأول يميناً — الصوت يميناً والإيقاف يساراً
+          // كما في اللوحة.
+          WoodToken(
+            icon: settings.soundOn ? Icons.volume_up : Icons.volume_off,
+            size: 48,
+            tooltip: settings.soundOn ? s.soundOn : s.soundOff,
             onPressed: () async {
               final on = !settings.soundOn;
               await settings.setSoundOn(on);
               if (on) SoundManager.instance.tap();
               setState(() {});
             },
-            icon: Icon(
-              settings.soundOn ? Icons.volume_up : Icons.volume_off,
-              color: SudaneseTheme.ink,
-            ),
-            tooltip: settings.soundOn ? s.soundOn : s.soundOff,
           ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------- بطاقة اللاعب
-
-  Widget _playerCard({required int player, bool rotate = false}) {
-    final controller = _controller;
-    final engine = controller.engine;
-    final isActive = engine.currentPlayer == player &&
-        controller.phase != TurnPhase.gameOver &&
-        controller.phase != TurnPhase.animating;
-    final asset =
-        player == 1 ? widget.config.p1Asset : widget.config.p2Asset;
-    final onBoard = engine.count(player);
-    // أثناء التوزيع لا يوجد أكل بعد: «باقي» = ما تبقّى في يد اللاعب
-    // ليضعه، و«أكلت» = صفر. بعد التوزيع «باقي» = أحجاره على اللوحة.
-    final captured = engine.placingPhase
-        ? 0
-        : engine.stonesPerPlayer - engine.count(3 - player);
-    final remainingToPlace = engine.placingPhase
-        ? engine.remainingToPlace(player)
-        : 0;
-    final left = engine.placingPhase ? remainingToPlace : onBoard;
-
-    final card = Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: SudaneseTheme.surface,
-        borderRadius:
-            BorderRadius.circular(SudaneseTheme.radiusCard),
-        border: isActive
-            ? Border.all(color: SudaneseTheme.gold, width: 3)
-            : Border.all(color: Colors.transparent, width: 3),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: SudaneseTheme.gold
-                      .withValues(alpha: 0.3 + _breath.value * 0.3),
-                  blurRadius: 14,
-                  spreadRadius: 2,
-                ),
-              ]
-            : SudaneseTheme.softShadow(opacity: 0.08),
-      ),
-      child: Row(
-        children: [
-          Image.asset(asset, width: 40, height: 40),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _nameFor(player),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: SudaneseTheme.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(Icons.circle,
-                        size: 12, color: SudaneseTheme.nile),
-                    const SizedBox(width: 4),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (child, animation) =>
-                          ScaleTransition(
-                              scale: animation, child: child),
-                      child: Text(
-                        '${s.remaining}: $left',
-                        key: ValueKey(left),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: SudaneseTheme.clay,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.local_dining,
-                        size: 13, color: SudaneseTheme.sudanRed),
-                    const SizedBox(width: 4),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (child, animation) =>
-                          ScaleTransition(
-                              scale: animation, child: child),
-                      child: Text(
-                        '${s.captured}: $captured',
-                        key: ValueKey(captured),
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: SudaneseTheme.clay,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (isActive)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: SudaneseTheme.gold,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: SudaneseTheme.softShadow(opacity: 0.25),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedBuilder(
-                    animation: _breath,
-                    builder: (context, child) => Opacity(
-                      opacity: 0.55 + _breath.value * 0.45,
-                      child: child,
-                    ),
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    s.turnBadge,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (engine.placingPhase && remainingToPlace > 0)
-            SizedBox(
-              width: 110,
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 2,
-                runSpacing: 2,
-                children: List.generate(
-                  remainingToPlace,
-                  (_) => Image.asset(asset, width: 12, height: 12),
-                ),
-              ),
-            ),
-          if (isActive && controller.isAiThinking && player == 2)
-            const _ThinkingDots(),
-        ],
-      ),
-    );
-
-    final dimmed = Opacity(
-      opacity: isActive ? 1.0 : 0.55,
-      child: card,
-    );
-    if (rotate) {
-      return RotatedBox(quarterTurns: 2, child: dimmed);
-    }
-    return dimmed;
-  }
-
-  // ---------------------------------------------------------- لافتة الدور
-
-  Widget _turnBanner() {
-    final controller = _controller;
-    final engine = controller.engine;
-    final activeAsset = engine.currentPlayer == 1
-        ? widget.config.p1Asset
-        : widget.config.p2Asset;
-
-    String text;
-    if (controller.phase == TurnPhase.gameOver) {
-      text = '';
-    } else if (engine.placingPhase) {
-      if (widget.config.vsComputer && engine.currentPlayer == 2) {
-        text = s.computerPlacing;
-      } else {
-        text = s.yourTurnPlace;
-      }
-    } else if (controller.isAiThinking) {
-      text = s.computerThinking;
-    } else {
-      text = widget.config.vsComputer
-          ? s.yourTurn
-          : '${_nameFor(engine.currentPlayer)} — ${s.turn}';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        transitionBuilder: (child, animation) {
-          final slide = Tween<Offset>(
-            begin: const Offset(0, 0.3),
-            end: Offset.zero,
-          ).animate(animation);
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: slide, child: child),
-          );
-        },
-        child: Container(
-          key: ValueKey(
-              '$text-${engine.currentPlayer}-${engine.placingPhase}'),
-          width: double.infinity,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: SudaneseTheme.gold.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: SudaneseTheme.gold, width: 2),
-            boxShadow: SudaneseTheme.softShadow(opacity: 0.08),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(activeAsset, width: 30, height: 30),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: SudaneseTheme.ink,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              if (controller.isAiThinking) ...[
-                const SizedBox(width: 8),
-                const _ThinkingDots(),
-              ],
-              if (engine.placingPhase) ...[
-                const SizedBox(width: 10),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(3, (i) {
-                    final filled = i < controller.placedThisTurn;
-                    return Container(
-                      margin:
-                          const EdgeInsets.symmetric(horizontal: 2),
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: filled
-                            ? SudaneseTheme.gold
-                            : SudaneseTheme.sandDark,
-                      ),
-                    );
-                  }),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------- الرصيف السفلي
-
-  Widget _bottomDock() {
-    final controller = _controller;
-    final canHint = controller.isHumanTurn && !controller.isPlacing;
-    if (!widget.config.vsComputer) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _dockButton(
-            icon: Icons.menu,
-            label: s.menu,
+          WoodToken(
+            icon: Icons.pause,
+            size: 48,
+            tooltip: s.menu,
             onPressed: _showPauseMenu,
           ),
         ],
-      );
-    }
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _dockButton(
-          icon: Icons.lightbulb_outline,
-          label: s.hint,
-          onPressed: canHint ? _onHint : null,
-          pulse: canHint,
-        ),
-        _dockButton(
-          icon: Icons.undo,
-          label: s.undo,
-          onPressed: controller.canUndo
-              ? () => controller.undo()
-              : null,
-        ),
-        _dockButton(
-          icon: Icons.menu,
-          label: s.menu,
-          onPressed: _showPauseMenu,
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _dockButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onPressed,
-    bool pulse = false,
-  }) {
-    final button = Column(
+  // ---------------------------------------------------------- مقعد الخصم
+
+  Widget _opponentBlock() {
+    final controller = _controller;
+    final engine = controller.engine;
+    final oppTurn = engine.currentPlayer == 2 &&
+        controller.phase != TurnPhase.gameOver;
+    final figure = widget.config.vsComputer
+        ? _OpponentFigure(
+            kind: _kindFor(widget.config.difficulty),
+            tilt: _tilt,
+            thinking: controller.isAiThinking,
+            bow: _bow,
+            bowing: controller.phase == TurnPhase.gameOver &&
+                controller.winner == 1,
+          )
+        : _P2Seat(
+            pebble: SudaneseTheme.pebbles[widget.config.p2Pebble],
+            name: s.player2,
+          );
+    final block = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PressableButton.icon(icon, onPressed: onPressed),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: onPressed == null
-                ? SudaneseTheme.clay.withValues(alpha: 0.5)
-                : SudaneseTheme.ink,
+        SizedBox(
+          height: 112,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              figure,
+              Positioned(
+                left: 52,
+                top: 34,
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    size: const Size(30, 40),
+                    painter: LanternPainter(lit: oppTurn),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // الترتيب RTL: الأول يميناً — «باقي» يميناً و«أكلت» يساراً
+              // كما في اللوحة.
+              BowlCounter(
+                pebble: SudaneseTheme.pebbles[widget.config.p2Pebble],
+                count: _leftOf(2),
+                label: s.remaining,
+              ),
+              BowlCounter(
+                // صحن «أكلت» فيه حجارة الخصم المأكولة — أي حجر
+                // اللاعب 1، لا حجر صاحب الصحن.
+                pebble: SudaneseTheme.pebbles[widget.config.p1Pebble],
+                count: _capturedOf(2),
+                label: s.captured,
+              ),
+            ],
           ),
         ),
       ],
     );
-    if (!pulse || onPressed == null) return button;
-    return AnimatedBuilder(
-      animation: _breath,
-      builder: (context, child) {
-        final scale = 1.0 + _breath.value * 0.06;
-        return Transform.scale(scale: scale, child: child);
-      },
-      child: button,
+    if (widget.config.vsComputer) return block;
+    return RotatedBox(quarterTurns: 2, child: block);
+  }
+
+  // ---------------------------------------------------------- سطر الدور
+
+  Widget _turnLineWidget() {
+    final controller = _controller;
+    final engine = controller.engine;
+    final text = _turnLine();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              text,
+              style: SudaneseTheme.heading.copyWith(fontSize: 18),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+        if (engine.placingPhase) ...[
+          const SizedBox(width: 10),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(3, (i) {
+              final filled = i < controller.placedThisTurn;
+              final def = SudaneseTheme.pebbles[
+                  engine.currentPlayer == 1
+                      ? widget.config.p1Pebble
+                      : widget.config.p2Pebble];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                width: 11,
+                height: 11,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: filled ? def.base : SudaneseTheme.sandDark,
+                  border: Border.all(
+                      color: SudaneseTheme.earthBlack, width: 1),
+                ),
+              );
+            }),
+          ),
+        ],
+        if (controller.isAiThinking) ...[
+          const SizedBox(width: 8),
+          const _ThinkingDots(),
+        ],
+      ],
     );
   }
 
-  // ---------------------------------------------------------- شاشة النتيجة
+  // ---------------------------------------------------------- منطقة اللاعب
+
+  Widget _playerZone() {
+    final controller = _controller;
+    final canHint = controller.isHumanTurn && !controller.isPlacing;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // الترتيب RTL: الأول يميناً — «باقي» يميناً و«أكلت» يساراً
+          // كما في اللوحة؛ زرّا التراجع والتلميح بينهما.
+          BowlCounter(
+            pebble: SudaneseTheme.pebbles[widget.config.p1Pebble],
+            count: _leftOf(1),
+            label: s.remaining,
+          ),
+          if (widget.config.vsComputer) ...[
+            WoodToken(
+              icon: Icons.undo,
+              size: 52,
+              tooltip: s.undo,
+              onPressed: controller.canUndo
+                  ? () {
+                      controller.undo();
+                      setState(() {
+                        _fx.move = null;
+                        _fx.hintMove = null;
+                      });
+                    }
+                  : null,
+            ),
+            WoodToken(
+              icon: Icons.lightbulb_outline,
+              size: 52,
+              tooltip: s.hint,
+              onPressed: canHint ? _onHint : null,
+            ),
+          ],
+          BowlCounter(
+            // صحن «أكلت» فيه حجارة الخصم المأكولة — أي حجر
+            // اللاعب 2، لا حجر صاحب الصحن.
+            pebble: SudaneseTheme.pebbles[widget.config.p2Pebble],
+            count: _capturedOf(1),
+            label: s.captured,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------- صف الاسم
+
+  Widget _nameRow() {
+    final engine = _controller.engine;
+    final myTurn = engine.currentPlayer == 1 &&
+        _controller.phase != TurnPhase.gameOver;
+    final name = widget.config.vsComputer ? s.you : s.player1;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        RepaintBoundary(
+          child: CustomPaint(
+            size: const Size(26, 34),
+            painter: LanternPainter(lit: myTurn),
+          ),
+        ),
+        const SizedBox(width: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            name,
+            style: SudaneseTheme.heading.copyWith(fontSize: 20),
+          ),
+        ),
+        const SizedBox(width: 8),
+        RepaintBoundary(
+          child: CustomPaint(
+            size: const Size(26, 26),
+            painter: PebblePainter(
+              def: SudaneseTheme.pebbles[widget.config.p1Pebble],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------- القائمة
+
+  void _showPauseMenu() {
+    showArchedSheet<void>(
+      context: context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _MenuRow(
+            icon: Icons.play_arrow,
+            label: s.resume,
+            onTap: () => Navigator.of(context).pop(),
+          ),
+          _MenuRow(
+            icon: Icons.refresh,
+            label: s.restart,
+            onTap: () {
+              Navigator.of(context).pop();
+              _controller.restart();
+              setState(() {
+                _fx.move = null;
+                _fx.hintMove = null;
+              });
+            },
+          ),
+          _MenuRow(
+            icon: Icons.settings,
+            label: s.settings,
+            onTap: () {
+              Navigator.of(context).pop();
+              showSettingsSheet(context, s);
+            },
+          ),
+          _MenuRow(
+            icon: Icons.help_outline,
+            label: s.howToPlay,
+            onTap: () {
+              Navigator.of(context).pop();
+              showHowToPlaySheet(context, s);
+            },
+          ),
+          _MenuRow(
+            icon: Icons.exit_to_app,
+            label: s.leaveGame,
+            onTap: () async {
+              Navigator.of(context).pop();
+              await _confirmLeave();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmLeave() async {
+    final leave = await showArchedSheet<bool>(
+      context: context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            s.exitQuestion,
+            style: SudaneseTheme.heading,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _ConfirmButton(
+                  label: s.yes,
+                  red: true,
+                  onTap: () => Navigator.of(context).pop(true),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ConfirmButton(
+                  label: s.no,
+                  red: false,
+                  onTap: () => Navigator.of(context).pop(false),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    if (leave == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  // ---------------------------------------------------------- النتيجة
 
   Widget _resultOverlay() {
     final controller = _controller;
-    final engine = controller.engine;
-    final winner = controller.winner ?? 0;
+    final winner = controller.winner;
     final isDraw = winner == 0;
-    final humanWon = widget.config.vsComputer
-        ? winner == 1
-        : winner != 0;
-    final capturedByP1 =
-        engine.stonesPerPlayer - engine.count(2);
-    final capturedByP2 =
-        engine.stonesPerPlayer - engine.count(1);
+    final isWin = winner == 1 ||
+        (!widget.config.vsComputer && winner != null && winner != 0);
+    final isLoss = widget.config.vsComputer && winner == 2;
 
     String title;
     String subtitle;
@@ -753,199 +679,190 @@ class _GameScreenState extends State<GameScreen>
         subtitle = s.tryAgainLine;
       }
     } else {
-      title = s.playerWon(_nameFor(winner));
-      subtitle = '';
+      title = s.playerWon(_nameFor(winner!));
+      subtitle = s.youWon;
     }
 
-    return Positioned.fill(
-      child: Container(
-        color: Colors.black.withValues(alpha: 0.55),
-        child: Stack(
-          children: [
-            if (humanWon) const Confetti(),
-            Center(
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.6, end: 1.0),
-                duration: const Duration(milliseconds: 500),
-                curve: Curves.easeOutBack,
-                builder: (context, scale, child) =>
-                    Transform.scale(scale: scale, child: child),
-                child: Container(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 32),
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-                  decoration: BoxDecoration(
-                    color: SudaneseTheme.surface,
-                    borderRadius: BorderRadius.circular(
-                        SudaneseTheme.radiusDialog),
-                    boxShadow:
-                        SudaneseTheme.softShadow(opacity: 0.3),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // تعتيم اللوحة خلف الصفحة.
+        Container(color: Colors.black.withValues(alpha: 0.55)),
+        if (isWin) const ConfettiOverlay(),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ميدالية الطبق على حافة الصفحة العلوية.
+              Opacity(
+                opacity: isLoss ? 0.55 : 1.0,
+                child: const RepaintBoundary(
+                  child: CustomPaint(
+                    size: Size(118, 118),
+                    painter: TabaqPainter(),
                   ),
+                ),
+              ),
+              Transform.translate(
+                offset: const Offset(0, -46),
+                child: ArchedPanel(
+                  padding:
+                      const EdgeInsets.fromLTRB(24, 78, 24, 26),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      isDraw
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Image.asset(widget.config.p1Asset,
-                                    width: 56, height: 56),
-                                const SizedBox(width: 10),
-                                Image.asset(widget.config.p2Asset,
-                                    width: 56, height: 56),
-                              ],
-                            )
-                          : const Icon(
-                              Icons.emoji_events,
-                              size: 72,
-                              color: SudaneseTheme.gold,
-                            ),
-                      const SizedBox(height: 12),
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          color: SudaneseTheme.ink,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      if (subtitle.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          subtitle,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: SudaneseTheme.clay,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          title,
+                          style: SudaneseTheme.display.copyWith(
+                            fontSize: 40,
+                            color: isWin
+                                ? SudaneseTheme.tabaqRed
+                                : SudaneseTheme.ink,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                      ],
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _resultStat(
-                              _nameFor(1), capturedByP1),
-                          _resultStat(
-                              _nameFor(2), capturedByP2),
-                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: SudaneseTheme.bodyBold,
+                        textAlign: TextAlign.center,
                       ),
                       if (widget.config.vsComputer) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
                         Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.center,
                           children: [
-                            _sessionChip(
-                                s.wins, controller.sessionWins),
-                            const SizedBox(width: 8),
-                            _sessionChip(s.losses,
-                                controller.sessionLosses),
-                            const SizedBox(width: 8),
-                            _sessionChip(
-                                s.draws, controller.sessionDraws),
+                            _SessionChip(
+                              count: controller.sessionWins,
+                              label: s.wins,
+                            ),
+                            const SizedBox(width: 10),
+                            _SessionChip(
+                              count: controller.sessionLosses,
+                              label: s.losses,
+                            ),
+                            const SizedBox(width: 10),
+                            _SessionChip(
+                              count: controller.sessionDraws,
+                              label: s.draws,
+                            ),
                           ],
                         ),
                       ],
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: PressableButton(
-                          label: s.playAgain,
-                          icon: Icons.replay,
-                          onPressed: () {
-                            _controller.restart();
-                            setState(() {
-                              _fx.move = null;
-                              _fx.hintMove = null;
-                            });
-                          },
-                        ),
+                      const SizedBox(height: 16),
+                      PlankButton(
+                        label: s.playAgain,
+                        caption: s.playAgainCaption,
+                        kind: PlankKind.red,
+                        onPressed: () {
+                          _controller.restart();
+                          setState(() {
+                            _fx.move = null;
+                            _fx.hintMove = null;
+                          });
+                        },
                       ),
                       const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: PressableButton(
-                          label: s.home,
-                          icon: Icons.home,
-                          variant: ButtonVariant.ghost,
-                          onPressed: () {
-                            Navigator.of(context).pushAndRemoveUntil(
-                              FadeSlidePageRoute(
-                                  builder: (_) =>
-                                      const HomeScreen()),
-                              (route) => false,
-                            );
-                          },
-                        ),
+                      PlankButton(
+                        label: s.backHome,
+                        kind: PlankKind.dark,
+                        onPressed: () => Navigator.of(context)
+                            .popUntil((r) => r.isFirst),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _resultStat(String name, int captured) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          name,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: SudaneseTheme.clay,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '$captured',
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-            color: SudaneseTheme.ink,
-          ),
-        ),
-        Text(
-          s.captured,
-          style: const TextStyle(
-            fontSize: 12,
-            color: SudaneseTheme.clay,
+            ],
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _sessionChip(String label, int value) {
+/// شخصية الخصم (ضد الكمبيوتر): تميل رأسها أثناء التفكير
+/// وتنحني عند فوز اللاعب.
+class _OpponentFigure extends StatelessWidget {
+  final ElderKind kind;
+  final Animation<double> tilt;
+  final bool thinking;
+  final Animation<double> bow;
+  final bool bowing;
+
+  const _OpponentFigure({
+    required this.kind,
+    required this.tilt,
+    required this.thinking,
+    required this.bow,
+    required this.bowing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([tilt, bow]),
+      builder: (context, child) {
+        final tiltValue = thinking
+            ? math.sin(tilt.value * 2 * math.pi) * 0.10
+            : 0.0;
+        return RepaintBoundary(
+          child: CustomPaint(
+            size: const Size(92, 118),
+            painter: ElderPainter(
+              kind: kind,
+              tilt: tiltValue,
+              bow: bowing ? bow.value : 0,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// مقعد اللاعب 2 (لاعبان): لوح قش فيه حجره واسمه.
+class _P2Seat extends StatelessWidget {
+  final PebbleDef pebble;
+  final String name;
+
+  const _P2Seat({required this.pebble, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: SudaneseTheme.sand,
+        color: SudaneseTheme.straw.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: SudaneseTheme.earthBlack, width: 1.5),
       ),
-      child: Text(
-        '$label: $value',
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: SudaneseTheme.ink,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RepaintBoundary(
+            child: CustomPaint(
+              size: const Size(30, 30),
+              painter: PebblePainter(def: pebble),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            name,
+            style: SudaneseTheme.heading.copyWith(fontSize: 20),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------- نقاط التفكير (3 نقاط متحركة)
-
+/// نقاط التفكير الثلاث.
 class _ThinkingDots extends StatefulWidget {
   const _ThinkingDots();
 
@@ -955,12 +872,12 @@ class _ThinkingDots extends StatefulWidget {
 
 class _ThinkingDotsState extends State<_ThinkingDots>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+  late final AnimationController _c;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _c = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat();
@@ -968,30 +885,27 @@ class _ThinkingDotsState extends State<_ThinkingDots>
 
   @override
   void dispose() {
-    _controller.dispose();
+    _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: _c,
       builder: (context, child) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {
-            final phase =
-                (_controller.value * 3 + i) % 3 / 3;
-            final opacity =
-                0.3 + 0.7 * (1 - (phase - 0.5).abs() * 2);
+            final phase = ((_c.value * 3 - i).clamp(0.0, 1.0));
             return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-              width: 6,
-              height: 6,
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: SudaneseTheme.nile
-                    .withValues(alpha: opacity.clamp(0.2, 1.0)),
+                color: SudaneseTheme.ink.withValues(
+                    alpha: 0.3 + 0.7 * (1 - phase)),
               ),
             );
           }),
@@ -1001,157 +915,100 @@ class _ThinkingDotsState extends State<_ThinkingDots>
   }
 }
 
-// ---------------------------------------------------------- قائمة الإيقاف
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
-class _PauseMenuSheet extends StatelessWidget {
-  final Strings strings;
-  final VoidCallback onResume;
-  final VoidCallback onRestart;
-  final VoidCallback onSettings;
-  final VoidCallback onHowToPlay;
-  final VoidCallback onLeave;
-
-  const _PauseMenuSheet({
-    required this.strings,
-    required this.onResume,
-    required this.onRestart,
-    required this.onSettings,
-    required this.onHowToPlay,
-    required this.onLeave,
+  const _MenuRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final s = strings;
-    return Container(
-      decoration: const BoxDecoration(
-        color: SudaneseTheme.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: SudaneseTheme.sandDark,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            s.pause,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: SudaneseTheme.ink,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          PressableButton(
-            label: s.resume,
-            icon: Icons.play_arrow,
-            onPressed: onResume,
-          ),
-          const SizedBox(height: 10),
-          PressableButton(
-            label: s.restart,
-            icon: Icons.replay,
-            variant: ButtonVariant.ghost,
-            onPressed: onRestart,
-          ),
-          const SizedBox(height: 10),
-          PressableButton(
-            label: s.settings,
-            icon: Icons.settings,
-            variant: ButtonVariant.ghost,
-            onPressed: onSettings,
-          ),
-          const SizedBox(height: 10),
-          PressableButton(
-            label: s.howToPlay,
-            icon: Icons.help_outline,
-            variant: ButtonVariant.ghost,
-            onPressed: onHowToPlay,
-          ),
-          const SizedBox(height: 10),
-          PressableButton(
-            label: s.leaveGame,
-            icon: Icons.exit_to_app,
-            variant: ButtonVariant.danger,
-            onPressed: onLeave,
-          ),
-        ],
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(
+          children: [
+            Icon(icon, color: SudaneseTheme.ink, size: 24),
+            const SizedBox(width: 12),
+            Text(label, style: SudaneseTheme.bodyBold),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ---------------------------------------------------------- ورقة تأكيد مشتركة
+class _ConfirmButton extends StatelessWidget {
+  final String label;
+  final bool red;
+  final VoidCallback onTap;
 
-class _ConfirmSheet extends StatelessWidget {
-  final Strings strings;
-  final String title;
-  final String confirmLabel;
-  final String cancelLabel;
-
-  const _ConfirmSheet({
-    required this.strings,
-    required this.title,
-    required this.confirmLabel,
-    required this.cancelLabel,
+  const _ConfirmButton({
+    required this.label,
+    required this.red,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: SudaneseTheme.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: red
+              ? SudaneseTheme.tabaqRed
+              : SudaneseTheme.woodDark,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: SudaneseTheme.hardShadow(),
+        ),
+        child: Text(
+          label,
+          style: SudaneseTheme.bodyBold.copyWith(
+            color: SudaneseTheme.cream,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w700,
-              color: SudaneseTheme.ink,
+    );
+  }
+}
+
+class _SessionChip extends StatelessWidget {
+  final int count;
+  final String label;
+
+  const _SessionChip({required this.count, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: SudaneseTheme.sand,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$count',
+              style: SudaneseTheme.display.copyWith(fontSize: 26),
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: PressableButton(
-                  label: confirmLabel,
-                  variant: ButtonVariant.danger,
-                  onPressed: () =>
-                      Navigator.of(context).pop(true),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: PressableButton(
-                  label: cancelLabel,
-                  variant: ButtonVariant.ghost,
-                  onPressed: () =>
-                      Navigator.of(context).pop(false),
-                ),
-              ),
-            ],
-          ),
-        ],
+            Text(
+              label,
+              style: SudaneseTheme.caption,
+            ),
+          ],
+        ),
       ),
     );
   }

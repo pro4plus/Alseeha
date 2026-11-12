@@ -15,10 +15,16 @@ class SoundManager {
   static const List<String> _files = [
     'ui_tap',
     'select',
-    'place',
-    'slide',
+    'place1',
+    'place2',
+    'place3',
+    'slide1',
+    'slide2',
+    'slide3',
     'land',
-    'capture',
+    'capture1',
+    'capture2',
+    'capture3',
     'capture_multi',
     'invalid',
     'turn',
@@ -60,7 +66,7 @@ class SoundManager {
       } catch (_) {}
     }
     // تحميل مسبق: جهّز أول مشغلين بأكثر الأصوات استعمالاً.
-    for (final name in ['ui_tap', 'place', 'select']) {
+    for (final name in ['ui_tap', 'place1', 'select']) {
       try {
         final p = _pool[0];
         if (p != null && _sources.containsKey(name)) {
@@ -85,18 +91,24 @@ class SoundManager {
     } catch (_) {}
   }
 
-  double _jitterPitch() => 0.95 + _random.nextDouble() * 0.13;
+  double _jitterPitch() => 0.96 + _random.nextDouble() * 0.08;
+
+  /// تناوب دائري بين متغيرات الصوت المتكرر (place/slide/capture).
+  String _variant(String base) {
+    final i = 1 + _random.nextInt(3);
+    return '$base$i';
+  }
 
   Future<void> tap() => _play('ui_tap', pitch: _jitterPitch());
-  Future<void> select() => _play('select');
-  Future<void> place() => _play('place', pitch: _jitterPitch());
-  Future<void> slide() => _play('slide');
+  Future<void> select() => _play('select', pitch: _jitterPitch());
+  Future<void> place() => _play(_variant('place'), pitch: _jitterPitch());
+  Future<void> slide() => _play(_variant('slide'));
   Future<void> land() => _play('land');
   Future<void> capture({bool multi = false, int step = 0}) {
     if (multi) return _play('capture_multi');
     // كل أكل متتابع في نفس الدور أعلى نبرة قليلاً.
     final pitch = (1.0 + step * 0.06).clamp(1.0, 1.18);
-    return _play('capture', pitch: pitch);
+    return _play(_variant('capture'), pitch: pitch);
   }
 
   Future<void> invalid() => _play('invalid');

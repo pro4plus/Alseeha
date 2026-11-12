@@ -3,6 +3,10 @@ class Strings {
   final bool isArabic;
   const Strings(this.isArabic);
 
+  String get homeTitle => isArabic ? 'السيجا' : 'Seega';
+  String get homeSubtitle => isArabic
+      ? 'السودانية · لعبة الحصار والدهاء'
+      : 'Sudanese · The game of siege and wit';
   String get appTitle => isArabic ? 'السيجا السودانية' : 'Sudanese Seega';
   String get tagline => isArabic
       ? 'لعبة الحصار والدهاء من تراث السودان'
@@ -13,7 +17,7 @@ class Strings {
   String get playVsComputer =>
       isArabic ? 'العب ضد الكمبيوتر' : 'Play vs Computer';
   String get playVsFriend =>
-      isArabic ? 'لاعبين على نفس الجهاز' : 'Two Players';
+      isArabic ? 'لاعبان على جهاز واحد' : 'Two players on one device';
   String get threeLevels =>
       isArabic ? '٣ مستويات — سهل، وسط، صعب' : '3 levels — easy, medium, hard';
   String get sameDevice =>
@@ -57,6 +61,7 @@ class Strings {
   String get startPlaying => isArabic ? 'أبدأ اللعب' : 'Start Playing';
   String get placeStones =>
       isArabic ? 'ضع 3 أحجار في أي خانة فاضية (ما عدا الوسطى)' : 'Place 3 stones on any empty square (not the centre)';
+  String get placeThree => isArabic ? 'ضع 3 أحجار' : 'Place 3 stones';
   String get yourTurnPlace =>
       isArabic ? 'دورك: ضع 3 أحجار' : 'Your turn: place 3 stones';
   String get computerPlacing =>
@@ -72,6 +77,32 @@ class Strings {
   String get turn => isArabic ? 'الدور' : 'Turn';
   String get captured => isArabic ? 'أكلت' : 'Captured';
   String get remaining => isArabic ? 'باقي' : 'Left';
+
+  // ---- شاشات v4 ----
+  String get sitToPlay => isArabic ? 'اجلس للعب' : 'Sit Down to Play';
+  String get againstWho => isArabic ? 'ضد مَن؟' : 'Against whom?';
+  String get elderYoung => isArabic ? 'ود البلد' : 'Wad Elbalad';
+  String get elderTeacher => isArabic ? 'الأستاذ' : 'The Teacher';
+  String get elderElder => isArabic ? 'الشيخ' : 'The Sheikh';
+  String get boardSection => isArabic ? 'اللوحة' : 'Board';
+  String get yourPebble => isArabic ? 'حجرك' : 'Your stone';
+  String computerTakes(String pebble) =>
+      isArabic ? 'الكمبيوتر ياخد $pebble' : 'Computer takes $pebble';
+  String get letsGo => isArabic ? 'يلا' : 'Let\u2019s go';
+  String get playVsComputerCaption => isArabic
+      ? 'اجلس قبالة الشيخ وجرّب حظك'
+      : 'Sit across from the Sheikh and try your luck';
+  String get playVsFriendCaption => isArabic
+      ? 'تحدّ صديقك وجهاً لوجه'
+      : 'Challenge a friend face to face';
+  String get tiktokLink => isArabic ? 'تيك توك @nubax' : 'TikTok @nubax';
+  String get turnLineChoose => isArabic
+      ? 'دورك: اختر حجراً ثم وجهته'
+      : 'Your turn: choose a stone, then its destination';
+  String turnOf(String name) =>
+      isArabic ? 'الدور: $name' : 'Turn: $name';
+  String get playAgainCaption =>
+      isArabic ? 'نفس الإعدادات' : 'Same settings';
   String get hint => isArabic ? 'تلميح' : 'Hint';
   String get undo => isArabic ? 'تراجع' : 'Undo';
   String get menu => isArabic ? 'القائمة' : 'Menu';

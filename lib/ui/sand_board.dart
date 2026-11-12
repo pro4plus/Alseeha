@@ -1,5 +1,6 @@
-// لوحة اللعب v3.0: إطار خشبي مائل، آبار محفورة، نجمة نوبية في الوسط،
-// وكل حركات §7 (سقوط، انزلاق، أكل، اهتزاز، موجة، تلميح، أثر).
+// لوحة الرمل التفاعلية: حُفَر وحصى مرسومة بالكود، مع كل
+// الحركات (§7): سقوط، انزلاق، أكل، اهتزاز، موجة، تلميح، أثر.
+// الخلية تُحسب من المساحة الداخلية (boardPx − 16) — درس v3.1.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,8 +9,9 @@ import '../game/seega_engine.dart';
 import '../game/turn_controller.dart';
 import '../l10n/strings.dart';
 import '../theme/sudanese_theme.dart';
-import 'effects/particles.dart';
-import 'effects/shockwave.dart';
+import 'painters/board.dart';
+import 'painters/pebble.dart';
+import 'painters/tabaq.dart';
 
 /// إشارات حركات ترسلها الشاشة إلى اللوحة (أرقام متسلسلة).
 class BoardFx {
@@ -24,33 +26,33 @@ class BoardFx {
   SeegaMove? hintMove;
 }
 
-class BoardView extends StatefulWidget {
+class SandBoard extends StatefulWidget {
   final SeegaEngine engine;
   final TurnController controller;
   final BoardFx fx;
-  final String p1Asset;
-  final String p2Asset;
+  final int p1Pebble;
+  final int p2Pebble;
   final Strings strings;
-  final void Function(int row, int col) onTapTile;
+  final void Function(int row, int col) onTapPit;
   final VoidCallback onFxDone;
 
-  const BoardView({
+  const SandBoard({
     super.key,
     required this.engine,
     required this.controller,
     required this.fx,
-    required this.p1Asset,
-    required this.p2Asset,
+    required this.p1Pebble,
+    required this.p2Pebble,
     required this.strings,
-    required this.onTapTile,
+    required this.onTapPit,
     required this.onFxDone,
   });
 
   @override
-  State<BoardView> createState() => _BoardViewState();
+  State<SandBoard> createState() => _SandBoardState();
 }
 
-class _BoardViewState extends State<BoardView>
+class _SandBoardState extends State<SandBoard>
     with TickerProviderStateMixin {
   late final AnimationController _slideController;
   late final AnimationController _captureController;
@@ -60,8 +62,8 @@ class _BoardViewState extends State<BoardView>
   late final AnimationController _hintController;
   late final AnimationController _trailController;
   late final AnimationController _pulseController;
-  late final AnimationController _glowController;
   late final AnimationController _breathController;
+  late final AnimationController _boardShakeController;
 
   int _seenPlaced = 0;
   int _seenMove = 0;
@@ -96,12 +98,11 @@ class _BoardViewState extends State<BoardView>
     _pulseController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 900))
       ..repeat(reverse: true);
-    _glowController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 2500))
-      ..repeat();
     _breathController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1500))
       ..repeat(reverse: true);
+    _boardShakeController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 180));
   }
 
   @override
@@ -115,8 +116,8 @@ class _BoardViewState extends State<BoardView>
       _hintController,
       _trailController,
       _pulseController,
-      _glowController,
       _breathController,
+      _boardShakeController,
     ]) {
       c.dispose();
     }
@@ -124,10 +125,9 @@ class _BoardViewState extends State<BoardView>
   }
 
   @override
-  void didUpdateWidget(covariant BoardView oldWidget) {
+  void didUpdateWidget(covariant SandBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.engine != widget.engine) {
-      // إعادة لعب: صفّر حالة الحركات المحلية.
       _slidingMove = null;
       _capturingMove = null;
       _placingSquare = null;
@@ -174,6 +174,9 @@ class _BoardViewState extends State<BoardView>
     _trailController.forward(from: 0);
     if (move.captured.isNotEmpty) {
       _capturingMove = move;
+      if (move.captured.length > 1) {
+        _boardShakeController.forward(from: 0);
+      }
       await _captureController.forward(from: 0);
       if (!mounted) return;
       setState(() => _capturingMove = null);
@@ -181,8 +184,8 @@ class _BoardViewState extends State<BoardView>
     widget.onFxDone();
   }
 
-  String _assetFor(int player) =>
-      player == 1 ? widget.p1Asset : widget.p2Asset;
+  PebbleDef _pebbleFor(int player) => SudaneseTheme.pebbles[
+      player == 1 ? widget.p1Pebble : widget.p2Pebble];
 
   List<List<int>> _destinations() {
     final sel = widget.controller.selectedTile;
@@ -210,190 +213,46 @@ class _BoardViewState extends State<BoardView>
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final boardPx = math.min(
-              constraints.maxWidth, constraints.maxHeight);
-          // اللوحة لها حشوة 8px من كل جهة (padding في الحاوية)،
-          // فالخلية تُحسب من المساحة الداخلية (boardPx − 16).
-          // حسابها من boardPx كاملاً كان يزيح الحجارة عن مربعاتها
-          // بمقدار يصل إلى ~14px فتخرج من المربع، ويجعل النقر
-          // على الحجر الظاهر يقع في المربع المجاور.
+          final boardPx =
+              math.min(constraints.maxWidth, constraints.maxHeight);
+          // اللوحة لها حشوة 8px من كل جهة (درس v3.1).
           final innerPx = boardPx - 16;
           final cell = innerPx / size;
           final sel = widget.controller.selectedTile;
           final lastMove = engine.lastMove;
 
-          return SizedBox(
-            width: boardPx,
-            height: boardPx,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius:
-                    BorderRadius.circular(SudaneseTheme.radiusBoard),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF8B5A2B), Color(0xFF6B4423)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.28),
-                    blurRadius: 22,
-                    offset: const Offset(0, 8),
-                  ),
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    blurRadius: 2,
-                    offset: const Offset(0, -1),
-                  ),
-                ],
-                border: Border.all(
-                  color: const Color(0xFF5A3320),
-                  width: 2,
-                ),
-              ),
-              padding: const EdgeInsets.all(8),
+          return AnimatedBuilder(
+            animation: _boardShakeController,
+            builder: (context, child) {
+              final t = _boardShakeController.value;
+              final dx = t > 0
+                  ? math.sin(t * math.pi * 4) * 4 * (1 - t)
+                  : 0.0;
+              return Transform.translate(
+                offset: Offset(dx, 0),
+                child: child,
+              );
+            },
+            child: SizedBox(
+              width: boardPx,
+              height: boardPx,
               child: Stack(
                 children: [
-                  // ---- الآبار ----
-                  GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: size,
+                  // ---- اللوح الرملي والحُفَر ----
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      size: Size(boardPx, boardPx),
+                      painter: BoardPainter(
+                        size: size,
+                        centreOccupied: !isCentreEmpty,
+                      ),
                     ),
-                    itemCount: size * size,
-                    itemBuilder: (context, index) {
-                      final r = index ~/ size;
-                      final c = index % size;
-                      final isCentre = r == centre && c == centre;
-                      final isDest = destinations.any(
-                          (d) => d[0] == r && d[1] == c);
-                      final isLast = lastMove != null &&
-                          ((lastMove.fromRow == r &&
-                                  lastMove.fromCol == c) ||
-                              (lastMove.toRow == r &&
-                                  lastMove.toCol == c));
-                      // المربع المحدد يأخذ إطاراً ذهبياً واضحاً حتى
-                      // يعرف اللاعب أي حجر ضغط عليه بالضبط.
-                      final isSelected =
-                          sel != null && sel[0] == r && sel[1] == c;
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => widget.onTapTile(r, c),
-                        child: Semantics(
-                          button: true,
-                          label: _tileLabel(r, c),
-                          child: Container(
-                            margin: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              gradient: RadialGradient(
-                                center: Alignment.center,
-                                radius: 0.9,
-                                colors: isCentre
-                                    ? [
-                                        SudaneseTheme.centerTile,
-                                        const Color(0xFF9FD0D8),
-                                      ]
-                                    : (r + c) % 2 == 0
-                                        ? [
-                                            SudaneseTheme.tileLight,
-                                            const Color(0xFFE2C79B),
-                                          ]
-                                        : [
-                                            SudaneseTheme.tileDark,
-                                            const Color(0xFFC9A672),
-                                          ],
-                              ),
-                              border: isSelected
-                                  ? Border.all(
-                                      color: SudaneseTheme.gold,
-                                      width: 3,
-                                    )
-                                  : isLast
-                                      ? Border.all(
-                                          color: SudaneseTheme.nile
-                                              .withValues(alpha: 0.8),
-                                          width: 2,
-                                        )
-                                      : null,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.25),
-                                  blurRadius: 3,
-                                  offset: const Offset(0, 2),
-                                ),
-                                if (isSelected)
-                                  BoxShadow(
-                                    color: SudaneseTheme.gold
-                                        .withValues(alpha: 0.55),
-                                    blurRadius: 10,
-                                    spreadRadius: 1,
-                                  ),
-                              ],
-                            ),
-                            // النجمة في الوسطى، ونقطة الوجهة فوقها
-                            // إن كانت الوسطى وجهة قانونية أيضاً.
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                if (isCentre && isCentreEmpty)
-                                  Positioned.fill(
-                                    child: AnimatedBuilder(
-                                      animation: _glowController,
-                                      builder: (context, child) {
-                                        final t = _glowController.value;
-                                        final glow =
-                                            (math.sin(t * math.pi * 2) +
-                                                    1) /
-                                                2;
-                                        return CustomPaint(
-                                          painter: NubianStarPainter(
-                                            color: SudaneseTheme.nile
-                                                .withValues(alpha: 0.75),
-                                            glow: 0.3 + glow * 0.7,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                if (isDest)
-                                  AnimatedBuilder(
-                                    animation: _pulseController,
-                                    builder: (context, child) {
-                                      final s = 0.9 +
-                                          _pulseController.value *
-                                              0.2;
-                                      return Transform.scale(
-                                        scale: s,
-                                        child: Container(
-                                          width: cell * 0.34,
-                                          height: cell * 0.34,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: SudaneseTheme
-                                                .palm
-                                                .withValues(
-                                                    alpha: 0.55),
-                                            border: Border.all(
-                                              color: SudaneseTheme
-                                                  .palm,
-                                              width: 2,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
                   ),
-                  // ---- أثر الحركة الأخيرة (خط يتلاشى 1.2 ث) ----
+                  // ---- مناطق النقر على الحُفَر (الخلية كاملة) ----
+                  ..._buildPitTargets(size, cell),
+                  // ---- حلقات الوجهات القانونية ----
+                  ..._buildDestinationRings(destinations, cell),
+                  // ---- أثر الحركة الأخيرة (1.2 ث) ----
                   if (lastMove != null)
                     AnimatedBuilder(
                       animation: _trailController,
@@ -402,25 +261,27 @@ class _BoardViewState extends State<BoardView>
                         if (t >= 1 && _trailController.isCompleted) {
                           return const SizedBox.shrink();
                         }
-                        return CustomPaint(
-                          size: Size(boardPx - 16, boardPx - 16),
-                          painter: _TrailPainter(
-                            from: Offset(
-                              (lastMove.fromCol + 0.5) * cell,
-                              (lastMove.fromRow + 0.5) * cell,
+                        return IgnorePointer(
+                          child: CustomPaint(
+                            size: Size(boardPx, boardPx),
+                            painter: _TrailPainter(
+                              from: Offset(
+                                8 + (lastMove.fromCol + 0.5) * cell,
+                                8 + (lastMove.fromRow + 0.5) * cell,
+                              ),
+                              to: Offset(
+                                8 + (lastMove.toCol + 0.5) * cell,
+                                8 + (lastMove.toRow + 0.5) * cell,
+                              ),
+                              opacity: (1 - t) * 0.7,
                             ),
-                            to: Offset(
-                              (lastMove.toCol + 0.5) * cell,
-                              (lastMove.toRow + 0.5) * cell,
-                            ),
-                            opacity: (1 - t) * 0.7,
                           ),
                         );
                       },
                     ),
-                  // ---- الحجارة ----
-                  ..._buildStones(size, cell, sel),
-                  // ---- حجر الانزلاق (طبقة فوق الحجارة) ----
+                  // ---- الحصى ----
+                  ..._buildPebbles(size, cell, sel),
+                  // ---- حجر الانزلاق (فوق الحصى) ----
                   if (_slidingMove != null)
                     AnimatedBuilder(
                       animation: _slideController,
@@ -429,30 +290,32 @@ class _BoardViewState extends State<BoardView>
                             _slideController.value);
                         final m = _slidingMove!.move;
                         final from = Offset(
-                            (m.fromCol + 0.5) * cell, (m.fromRow + 0.5) * cell);
+                            8 + (m.fromCol + 0.5) * cell,
+                            8 + (m.fromRow + 0.5) * cell);
                         final to = Offset(
-                            (m.toCol + 0.5) * cell, (m.toRow + 0.5) * cell);
+                            8 + (m.toCol + 0.5) * cell,
+                            8 + (m.toRow + 0.5) * cell);
                         final pos = Offset.lerp(from, to, t)!;
-                        final stonePx = cell * 0.78;
+                        final pebblePx = cell * 0.78;
                         return Positioned(
-                          left: pos.dx - stonePx / 2,
-                          top: pos.dy - stonePx / 2,
+                          left: pos.dx - pebblePx / 2,
+                          top: pos.dy - pebblePx / 2,
                           child: Transform.scale(
                             scale: 1 + 0.08 * math.sin(t * math.pi),
-                            child: _stoneImage(
-                                _assetFor(_slidingMove!.mover), stonePx),
+                            child: _pebbleImage(
+                                _pebbleFor(_slidingMove!.mover), pebblePx),
                           ),
                         );
                       },
                     ),
-                  // ---- الحجارة المأكولة (تنكمش وتدور وتتلاشى) ----
+                  // ---- الحصى المأكولة ----
                   if (_capturingMove != null)
                     AnimatedBuilder(
                       animation: _captureController,
                       builder: (context, child) {
                         final t = _captureController.value;
                         final captured = _capturingMove!.captured;
-                        final stonePx = cell * 0.78;
+                        final pebblePx = cell * 0.78;
                         final widgets = <Widget>[];
                         for (var i = 0; i < captured.length; i++) {
                           final sq = captured[i];
@@ -464,59 +327,66 @@ class _BoardViewState extends State<BoardView>
                           final lt = interval.transform(t);
                           final scale = 1 - lt;
                           final opacity = 1 - lt;
-                          final rotation = lt * 0.6;
-                          final cx = (sq[1] + 0.5) * cell;
-                          final cy = (sq[0] + 0.5) * cell;
+                          final rotation = lt * 0.44; // ~25°
+                          final cx = 8 + (sq[1] + 0.5) * cell;
+                          final cy = 8 + (sq[0] + 0.5) * cell;
                           widgets.add(Positioned(
-                            left: cx - stonePx / 2,
-                            top: cy - stonePx / 2,
+                            left: cx - pebblePx / 2,
+                            top: cy - pebblePx / 2,
                             child: Opacity(
                               opacity: opacity.clamp(0.0, 1.0),
                               child: Transform.rotate(
                                 angle: rotation,
                                 child: Transform.scale(
                                   scale: scale.clamp(0.0, 1.0),
-                                  child: _stoneImage(
-                                    _assetFor(
-                                        3 - _capturingMove!.mover),
-                                    stonePx,
+                                  child: _pebbleImage(
+                                    _pebbleFor(3 - _capturingMove!.mover),
+                                    pebblePx,
                                   ),
                                 ),
                               ),
                             ),
                           ));
+                          // شظايا قش/ذهب.
                           widgets.add(Positioned.fill(
-                            child: ParticleBurst(
+                            child: _Fragments(
                               origin: Offset(cx, cy),
-                              size: cell,
-                              color: SudaneseTheme.gold,
-                              count: 7,
+                              progress: lt,
                             ),
                           ));
+                          // موجة صدمة من حجر الهبوط.
                           widgets.add(Positioned.fill(
-                            child: Shockwave(
-                              origin: Offset(cx, cy),
+                            child: _Shockwave(
+                              origin: Offset(
+                                8 +
+                                    (_capturingMove!.move.toCol + 0.5) *
+                                        cell,
+                                8 +
+                                    (_capturingMove!.move.toRow + 0.5) *
+                                        cell,
+                              ),
+                              progress: t,
                               maxRadius: cell * 0.9,
                             ),
                           ));
                         }
-                        // شارة x2 / x3 للأكل المتعدد + اهتزاز دقيق.
                         if (captured.length > 1) {
                           final m = _capturingMove!.move;
-                          final dx = math.sin(t * math.pi * 4) * 2 * (1 - t);
+                          final dx =
+                              math.sin(t * math.pi * 4) * 2 * (1 - t);
                           widgets.add(Positioned(
-                            left: (m.toCol + 0.5) * cell - 14 + dx,
-                            top: (m.toRow + 0.5) * cell - cell * 0.55,
+                            left: 8 + (m.toCol + 0.5) * cell - 14 + dx,
+                            top: 8 + (m.toRow + 0.5) * cell - cell * 0.55,
                             child: Container(
                               width: 28,
                               height: 28,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: SudaneseTheme.gold,
+                                color: SudaneseTheme.sunGold,
                                 border: Border.all(
                                     color: Colors.white, width: 2),
                                 boxShadow:
-                                    SudaneseTheme.softShadow(opacity: 0.3),
+                                    SudaneseTheme.hardShadow(),
                               ),
                               alignment: Alignment.center,
                               child: Text(
@@ -530,7 +400,11 @@ class _BoardViewState extends State<BoardView>
                             ),
                           ));
                         }
-                        return Stack(children: widgets);
+                        // الشظايا والموجة زخرفية فقط (أثناء الحركة
+                        // المتحركة يُتجاهل الإدخال أصلاً).
+                        return IgnorePointer(
+                          child: Stack(children: widgets),
+                        );
                       },
                     ),
                   // ---- سهم التلميح (3 ثوانٍ) ----
@@ -542,18 +416,20 @@ class _BoardViewState extends State<BoardView>
                             0.4 *
                                 math.sin(
                                     _hintController.value * math.pi * 6);
-                        return CustomPaint(
-                          size: Size(boardPx - 16, boardPx - 16),
-                          painter: _HintPainter(
-                            from: Offset(
-                              (_hintMove!.fromCol + 0.5) * cell,
-                              (_hintMove!.fromRow + 0.5) * cell,
+                        return IgnorePointer(
+                          child: CustomPaint(
+                            size: Size(boardPx, boardPx),
+                            painter: _HintPainter(
+                              from: Offset(
+                                8 + (_hintMove!.fromCol + 0.5) * cell,
+                                8 + (_hintMove!.fromRow + 0.5) * cell,
+                              ),
+                              to: Offset(
+                                8 + (_hintMove!.toCol + 0.5) * cell,
+                                8 + (_hintMove!.toRow + 0.5) * cell,
+                              ),
+                              alpha: pulse,
                             ),
-                            to: Offset(
-                              (_hintMove!.toCol + 0.5) * cell,
-                              (_hintMove!.toRow + 0.5) * cell,
-                            ),
-                            alpha: pulse,
                           ),
                         );
                       },
@@ -565,13 +441,39 @@ class _BoardViewState extends State<BoardView>
                       builder: (context, child) {
                         final t = Curves.easeOutCubic.transform(
                             _waveController.value);
-                        final centrePx = boardPx / 2 - 8;
-                        return CustomPaint(
-                          size: Size(boardPx - 16, boardPx - 16),
-                          painter: _WavePainter(
-                            centre: Offset(centrePx, centrePx),
-                            radius: t * boardPx * 0.7,
-                            alpha: (1 - t) * 0.6,
+                        final centrePx = boardPx / 2;
+                        return IgnorePointer(
+                          child: CustomPaint(
+                            size: Size(boardPx, boardPx),
+                            painter: _WavePainter(
+                              centre: Offset(centrePx, centrePx),
+                              radius: t * boardPx * 0.7,
+                              alpha: (1 - t) * 0.6,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  // ---- وميض أحمر خفيف على الحفرة غير القانونية ----
+                  if (_shakingSquare != null &&
+                      _shakeController.isAnimating)
+                    AnimatedBuilder(
+                      animation: _shakeController,
+                      builder: (context, child) {
+                        final t = _shakeController.value;
+                        final r = _shakingSquare![0];
+                        final c = _shakingSquare![1];
+                        return Positioned(
+                          left: 8 + c * cell,
+                          top: 8 + r * cell,
+                          child: Container(
+                            width: cell,
+                            height: cell,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: SudaneseTheme.tabaqRed
+                                  .withValues(alpha: 0.25 * (1 - t)),
+                            ),
                           ),
                         );
                       },
@@ -585,41 +487,94 @@ class _BoardViewState extends State<BoardView>
     );
   }
 
-  List<Widget> _buildStones(int size, double cell, List<int>? sel) {
+  List<Widget> _buildPitTargets(int size, double cell) {
+    final widgets = <Widget>[];
+    for (var r = 0; r < size; r++) {
+      for (var c = 0; c < size; c++) {
+        widgets.add(Positioned(
+          left: 8 + c * cell,
+          top: 8 + r * cell,
+          width: cell,
+          height: cell,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => widget.onTapPit(r, c),
+            child: Semantics(
+              button: true,
+              label: _pitLabel(r, c),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ));
+      }
+    }
+    return widgets;
+  }
+
+  List<Widget> _buildDestinationRings(
+      List<List<int>> destinations, double cell) {
+    final widgets = <Widget>[];
+    for (final d in destinations) {
+      final r = d[0];
+      final c = d[1];
+      widgets.add(Positioned(
+        left: 8 + c * cell,
+        top: 8 + r * cell,
+        width: cell,
+        height: cell,
+        // الحلقة زخرفية فقط: يجب ألا تبتلع النقر على الحفرة.
+        child: IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _pulseController,
+            builder: (context, child) {
+              final s = 0.92 + _pulseController.value * 0.16;
+              return Transform.scale(
+                scale: s,
+                child: CustomPaint(
+                  painter: _DestRingPainter(),
+                ),
+              );
+            },
+          ),
+        ),
+      ));
+    }
+    return widgets;
+  }
+
+  List<Widget> _buildPebbles(int size, double cell, List<int>? sel) {
     final engine = widget.engine;
     final widgets = <Widget>[];
-    final stonePx = cell * 0.78;
+    final pebblePx = cell * 0.78;
     for (var r = 0; r < size; r++) {
       for (var c = 0; c < size; c++) {
         final value = engine.board[r][c];
         if (value == 0) continue;
-        // الحجر المنزلق يُخفى من مكانه الأصلي أثناء الانزلاق.
         if (_slidingMove != null &&
             _slidingMove!.move.toRow == r &&
             _slidingMove!.move.toCol == c) {
           continue;
         }
-        // الحجارة المأكولة تُخفى أثناء حركة الأكل (تُرسم في الطبقة).
         if (_capturingMove != null &&
             _capturingMove!.captured
                 .any((sq) => sq[0] == r && sq[1] == c)) {
           continue;
         }
-        final isSelected =
-            sel != null && sel[0] == r && sel[1] == c;
+        final isSelected = sel != null && sel[0] == r && sel[1] == c;
         final isPlacing = _placingSquare != null &&
             _placingSquare![0] == r &&
             _placingSquare![1] == c;
         final isShaking = _shakingSquare != null &&
             _shakingSquare![0] == r &&
             _shakingSquare![1] == c;
-        final cx = (c + 0.5) * cell;
-        final cy = (r + 0.5) * cell;
+        final cx = 8 + (c + 0.5) * cell;
+        final cy = 8 + (r + 0.5) * cell;
 
-        Widget stone = _stoneImage(_assetFor(value), stonePx);
+        Widget pebble = _pebbleImage(_pebbleFor(value), pebblePx);
 
+        // الحصاة المحددة: حلقة ذهبية + رفع 12% + ظل أطول.
         if (isSelected) {
-          stone = AnimatedBuilder(
+          pebble = AnimatedBuilder(
             animation: _breathController,
             builder: (context, child) {
               final breath = 0.5 + _breathController.value * 0.5;
@@ -628,56 +583,55 @@ class _BoardViewState extends State<BoardView>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: SudaneseTheme.gold
+                      color: SudaneseTheme.sunGold
                           .withValues(alpha: 0.35 + breath * 0.4),
                       blurRadius: 14,
                       spreadRadius: 3,
                     ),
                   ],
                   border: Border.all(
-                    color: SudaneseTheme.gold,
-                    width: 2.5,
+                    color: SudaneseTheme.sunGold,
+                    width: 3,
                   ),
                 ),
                 child: child,
               );
             },
-            child: stone,
+            child: pebble,
           );
         }
 
-        stone = AnimatedScale(
-          scale: isSelected ? 1.15 : 1.0,
+        pebble = AnimatedScale(
+          scale: isSelected ? 1.12 : 1.0,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
-          child: stone,
+          child: pebble,
         );
 
         if (isPlacing) {
-          stone = AnimatedBuilder(
+          pebble = AnimatedBuilder(
             animation: _placeController,
             builder: (context, child) {
               final t = Curves.easeOutCubic.transform(
                   _placeController.value);
-              final drop = (1 - t) * -cell * 0.6;
+              final drop = (1 - t) * -28.0;
               final squash = t < 0.85 ? 1.0 : 1.0 - (t - 0.85) * 0.6;
               return SizedBox(
-                width: stonePx,
-                height: stonePx,
+                width: pebblePx,
+                height: pebblePx,
                 child: Stack(
                   alignment: Alignment.center,
                   clipBehavior: Clip.none,
                   children: [
-                    // حلقة غبار تتسع وتتلاشى عند سقوط الحجر.
                     Opacity(
                       opacity: (1 - t) * 0.6,
                       child: Container(
-                        width: stonePx * (0.8 + t * 0.7),
-                        height: stonePx * (0.8 + t * 0.7),
+                        width: pebblePx * (0.8 + t * 0.7),
+                        height: pebblePx * (0.8 + t * 0.7),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: SudaneseTheme.gold
+                            color: SudaneseTheme.sunGold
                                 .withValues(alpha: 0.8),
                             width: 2,
                           ),
@@ -696,17 +650,16 @@ class _BoardViewState extends State<BoardView>
                 ),
               );
             },
-            child: stone,
+            child: pebble,
           );
         }
 
         if (isShaking) {
-          stone = AnimatedBuilder(
+          pebble = AnimatedBuilder(
             animation: _shakeController,
             builder: (context, child) {
               final t = _shakeController.value;
-              final dx =
-                  math.sin(t * math.pi * 4) * 4 * (1 - t);
+              final dx = math.sin(t * math.pi * 6) * 3 * (1 - t);
               return Transform.translate(
                 offset: Offset(dx, 0),
                 child: Opacity(
@@ -715,19 +668,18 @@ class _BoardViewState extends State<BoardView>
                 ),
               );
             },
-            child: stone,
+            child: pebble,
           );
         }
 
         widgets.add(Positioned(
-          left: cx - stonePx / 2,
-          top: cy - stonePx / 2,
-          // النقر على الحجر نفسه يختار ذلك الحجر مباشرة،
-          // فلا يعتمد الأمر على سقوط النقرة إلى المربع تحته.
+          left: cx - pebblePx / 2,
+          top: cy - pebblePx / 2,
+          // النقر على الحصاة نفسها يختارها (درس v3.1).
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTap: () => widget.onTapTile(r, c),
-            child: stone,
+            onTap: () => widget.onTapPit(r, c),
+            child: pebble,
           ),
         ));
       }
@@ -735,32 +687,15 @@ class _BoardViewState extends State<BoardView>
     return widgets;
   }
 
-  Widget _stoneImage(String asset, double px) {
+  Widget _pebbleImage(PebbleDef def, double px) {
     return SizedBox(
       width: px,
       height: px,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // ظل تلامس أسفل الحجر.
-          Positioned(
-            bottom: 0,
-            child: Container(
-              width: px * 0.7,
-              height: px * 0.18,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-          Image.asset(asset, width: px * 0.94, height: px * 0.94),
-        ],
-      ),
+      child: CustomPaint(painter: PebblePainter(def: def)),
     );
   }
 
-  String _tileLabel(int r, int c) {
+  String _pitLabel(int r, int c) {
     final s = widget.strings;
     final value = widget.engine.board[r][c];
     final centre = widget.engine.size ~/ 2;
@@ -778,6 +713,33 @@ class _BoardViewState extends State<BoardView>
   }
 }
 
+class _DestRingPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.width * 0.36;
+    // ملء أخضر شاحب.
+    canvas.drawCircle(
+      center,
+      r,
+      Paint()
+        ..color = SudaneseTheme.palmGreen.withValues(alpha: 0.18),
+    );
+    // حلقة خضراء متقطعة.
+    paintDashedCircle(
+      canvas,
+      center,
+      r,
+      SudaneseTheme.palmGreen,
+      2.5,
+      dashes: 14,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class _TrailPainter extends CustomPainter {
   final Offset from, to;
   final double opacity;
@@ -788,10 +750,17 @@ class _TrailPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = SudaneseTheme.nile.withValues(alpha: opacity)
-      ..strokeWidth = 4
+      ..color = SudaneseTheme.sandDark.withValues(alpha: opacity)
+      ..strokeWidth = 5
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(from, to, paint);
+    // دوامة رمل صغيرة عند الوجهة.
+    canvas.drawCircle(
+      to,
+      6,
+      Paint()
+        ..color = SudaneseTheme.sandDark.withValues(alpha: opacity * 0.7),
+    );
   }
 
   @override
@@ -809,11 +778,10 @@ class _HintPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = SudaneseTheme.gold.withValues(alpha: alpha)
+      ..color = SudaneseTheme.sunGold.withValues(alpha: alpha)
       ..strokeWidth = 5
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(from, to, paint);
-    // رأس السهم.
     final angle = math.atan2(to.dy - from.dy, to.dx - from.dx);
     const head = 12.0;
     final path = Path()
@@ -843,7 +811,7 @@ class _WavePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (radius <= 0) return;
     final paint = Paint()
-      ..color = SudaneseTheme.gold.withValues(alpha: alpha)
+      ..color = SudaneseTheme.sunGold.withValues(alpha: alpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
     canvas.drawCircle(centre, radius, paint);
@@ -852,4 +820,102 @@ class _WavePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _WavePainter oldDelegate) =>
       oldDelegate.radius != radius;
+}
+
+/// شظايا قش/ذهب تتطاير من الحصاة المأكولة.
+class _Fragments extends StatelessWidget {
+  final Offset origin;
+  final double progress;
+
+  const _Fragments({required this.origin, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _FragmentsPainter(origin: origin, progress: progress),
+    );
+  }
+}
+
+class _FragmentsPainter extends CustomPainter {
+  final Offset origin;
+  final double progress;
+
+  _FragmentsPainter({required this.origin, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rng = math.Random(5);
+    for (var i = 0; i < 7; i++) {
+      final a = rng.nextDouble() * math.pi * 2;
+      final d = progress * (14 + rng.nextDouble() * 18);
+      final p = origin + Offset(math.cos(a) * d, math.sin(a) * d);
+      canvas.drawCircle(
+        p,
+        2.5 * (1 - progress),
+        Paint()
+          ..color = (i.isEven
+                  ? SudaneseTheme.sunGold
+                  : SudaneseTheme.straw)
+              .withValues(alpha: 1 - progress),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FragmentsPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+/// موجة صدمة دائرية من حجر الهبوط.
+class _Shockwave extends StatelessWidget {
+  final Offset origin;
+  final double progress;
+  final double maxRadius;
+
+  const _Shockwave({
+    required this.origin,
+    required this.progress,
+    required this.maxRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _ShockwavePainter(
+        origin: origin,
+        progress: progress,
+        maxRadius: maxRadius,
+      ),
+    );
+  }
+}
+
+class _ShockwavePainter extends CustomPainter {
+  final Offset origin;
+  final double progress;
+  final double maxRadius;
+
+  _ShockwavePainter({
+    required this.origin,
+    required this.progress,
+    required this.maxRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    canvas.drawCircle(
+      origin,
+      progress * maxRadius,
+      Paint()
+        ..color = SudaneseTheme.sunGold.withValues(alpha: (1 - progress) * 0.7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShockwavePainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

@@ -1,6 +1,6 @@
 name: alseeja
 description: لعبة السيجا السودانية باستخدام Flutter — لعب ضد الكمبيوتر بثلاثة مستويات أو لاعبين
-version: 3.0.0+1
+version: 4.0.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -17,35 +17,23 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.14.0
-
-flutter_icons:
-  android: true
-  ios: true
-  image_path: "assets/seega_logo.png"
 
 flutter:
   uses-material-design: true
 
   assets:
-    - assets/yellow_stone.png
-    - assets/gray_stone.png
-    - assets/turquoise_stone.png
-    - assets/red_stone.png
-    - assets/green_stone.png
-    - assets/brown_stone.png
-    - assets/blue_stone.png
-    - assets/nubax.png
-    - assets/seja.png
-    - assets/seega_logo.png
-    - assets/ANIMSEJA.gif
-    - assets/tiktok.png
     - assets/sounds/ui_tap.wav
     - assets/sounds/select.wav
-    - assets/sounds/place.wav
-    - assets/sounds/slide.wav
+    - assets/sounds/place1.wav
+    - assets/sounds/place2.wav
+    - assets/sounds/place3.wav
+    - assets/sounds/slide1.wav
+    - assets/sounds/slide2.wav
+    - assets/sounds/slide3.wav
     - assets/sounds/land.wav
-    - assets/sounds/capture.wav
+    - assets/sounds/capture1.wav
+    - assets/sounds/capture2.wav
+    - assets/sounds/capture3.wav
     - assets/sounds/capture_multi.wav
     - assets/sounds/invalid.wav
     - assets/sounds/turn.wav
@@ -57,11 +45,15 @@ flutter:
     - assets/sounds/draw.wav
 
   fonts:
+    - family: ReemKufi
+      fonts:
+        - asset: assets/fonts/ReemKufi-700.ttf
+          weight: 700
     - family: Tajawal
       fonts:
         - asset: assets/fonts/Tajawal-Medium.ttf
           weight: 500
         - asset: assets/fonts/Tajawal-Bold.ttf
           weight: 700
-        - asset: assets/fonts/Tajawal-Black.ttf
-          weight: 900
+        - asset: assets/fonts/Tajawal-ExtraBold.ttf
+          weight: 800
