@@ -209,23 +209,24 @@ class WallPainter extends CustomPainter {
   /// مشهد الغروب: سماء (بنفسجي→كركدي→برتقالي)، شمس طبق،
   /// أهرامات، النيل، نخلة.
   void _paintDusk(Canvas canvas, Rect rect, double sunT) {
-    // السماء: أشرطة مسطحة متدرجة داخل الباب فقط (كما في اللوحة).
-    final sky = Rect.fromLTWH(
-        rect.left, rect.top, rect.width, rect.height * 0.62);
-    canvas.drawRect(
-      sky,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF3B2A63),
-            Color(0xFF8A2A6B),
-            Color(0xFFE58A1F),
-          ],
-          stops: [0.0, 0.55, 1.0],
-        ).createShader(sky),
-    );
+    // سماء الغروب من شرائط لونية مسطحة: شكل مطبوع باليد لا غشاوة رقمية.
+    final sky = Rect.fromLTWH(rect.left, rect.top, rect.width, rect.height * 0.62);
+    const bands = [
+      Color(0xFF252552),
+      Color(0xFF343063),
+      Color(0xFF512C6B),
+      Color(0xFF762C68),
+      Color(0xFFA63A55),
+      Color(0xFFD45D35),
+      Color(0xFFE58A1F),
+    ];
+    final bandH = sky.height / bands.length;
+    for (var i = 0; i < bands.length; i++) {
+      canvas.drawRect(Rect.fromLTWH(sky.left, sky.top + i * bandH, sky.width, bandH + 1), Paint()..color = bands[i]);
+    }
+    final cloud = Paint()..color = Colors.white.withValues(alpha: 0.16)..strokeWidth = 2..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(sky.left + 10, sky.top + sky.height * .28), Offset(sky.left + sky.width * .34, sky.top + sky.height * .25), cloud);
+    canvas.drawLine(Offset(sky.left + sky.width * .58, sky.top + sky.height * .38), Offset(sky.right - 12, sky.top + sky.height * .35), cloud);
     // الأفق البرتقالي.
     final horizonY = rect.top + rect.height * 0.62;
     canvas.drawRect(
