@@ -52,8 +52,9 @@ class SoundManager {
   }
 
   Future<void> _play(String name, {double pitch = 1.0}) async {
-    if (!enabled) return;
-    if (!_ready) await init();
+    // التهيئة تتم مرة واحدة في main بعد تهيئة Flutter binding.
+    // لا نبدأ just_audio تلقائيًا من اختبارات المحرك أو callbacks مبكرة.
+    if (!enabled || !_ready) return;
     final source = _sources[name];
     if (source == null) return;
     final player = _pool[_next];
