@@ -1,6 +1,5 @@
-// مدير الصوت v3.0: مجموعة من 6 مشغلات قابلة لإعادة الاستخدام حتى
-// تتداخل الأصوات (انزلاق ثم أكل مثلاً)، مع تحميل مسبق لكل الملفات.
-// أي صوت مفقود أو فاشل يُتجاهل بصمت — الصوت لا يوقف اللعبة أبداً.
+// مدير الصوت: ستة مشغلات متوازية حتى تتداخل أصوات الحركة والأكل بدون قطع بعضها.
+// أي فشل في جهاز الصوت يُتجاهل؛ المؤثرات لا توقف اللعب.
 import 'dart:math';
 
 import 'package:just_audio/just_audio.dart';
@@ -13,45 +12,28 @@ class SoundManager {
   SoundManager._();
 
   static const List<String> _files = [
-    'ui_tap',
-    'select',
-    'place1',
-    'place2',
-    'place3',
-    'slide1',
-    'slide2',
-    'slide3',
-    'land',
-    'capture1',
-    'capture2',
-    'capture3',
-    'capture_multi',
-    'invalid',
-    'turn',
-    'hint',
-    'undo',
-    'start',
-    'win',
-    'lose',
-    'draw',
+    'ui_tap', 'select', 'place1', 'place2', 'place3',
+    'slide1', 'slide2', 'slide3', 'land',
+    'capture1', 'capture2', 'capture3', 'capture_multi',
+    'invalid', 'turn', 'hint', 'undo', 'start', 'win', 'lose', 'draw',
   ];
 
   static const int _poolSize = 6;
 
-  final List<AudioPlayer?> _pool = List.filled(_poolSize, null);
-  final Map<String, AudioSource> _sources = {};
+  final List<AudioPlayer?> _pool = List<AudioPlayer?>.filled(_poolSize, null);
+  final Map<String, AudioSource> _sources = <String, AudioSource>{};
   final Random _random = Random();
+  Future<void>? _initFuture;
   int _next = 0;
   bool _ready = false;
 
   bool get enabled => AppSettings.instance.soundOn;
-  double get volume => AppSettings.instance.volume;
+  double get volume => AppSettings.instance.volume.clamp(0.0, 1.0).toDouble();
 
-  /// أنشئ المشغلات وحمّل كل الملفات. آمن للاستدعاء من الاختبارات
-  /// (الفشل هنا لا يرمي أي استثناء).
-  Future<void> init() async {
-    if (_ready) return;
-    _ready = true;
+  /// التهيئة قابلة للاستدعاء عدة مرات، لكن التنفيذ يحدث مرة واحدة فقط.
+  Future<void> init() => _initFuture ??= _initOnce();
+
+  Future<void> _initOnce() async {
     for (var i = 0; i < _poolSize; i++) {
       try {
         _pool[i] = AudioPlayer();
@@ -61,53 +43,45 @@ class SoundManager {
     }
     for (final name in _files) {
       try {
-        _sources[name] =
-            AudioSource.asset('assets/sounds/$name.wav');
-      } catch (_) {}
+        _sources[name] = AudioSource.asset('assets/sounds/$name.wav');
+      } catch (_) {
+        // يبقى الاسم غير متاح فقط، وتستمر بقية الأصوات.
+      }
     }
-    // تحميل مسبق: جهّز أول مشغلين بأكثر الأصوات استعمالاً.
-    for (final name in ['ui_tap', 'place1', 'select']) {
-      try {
-        final p = _pool[0];
-        if (p != null && _sources.containsKey(name)) {
-          await p.setAudioSource(_sources[name]!);
-        }
-      } catch (_) {}
-    }
+    _ready = true;
   }
 
   Future<void> _play(String name, {double pitch = 1.0}) async {
     if (!enabled) return;
+    if (!_ready) await init();
     final source = _sources[name];
     if (source == null) return;
     final player = _pool[_next];
     _next = (_next + 1) % _poolSize;
     if (player == null) return;
     try {
-      await player.setVolume(volume);
-      await player.setSpeed(pitch);
       await player.setAudioSource(source);
+      await player.setVolume(volume);
+      await player.setSpeed(pitch.clamp(0.85, 1.2).toDouble());
       await player.play();
-    } catch (_) {}
+    } catch (_) {
+      // الصوت تحسين اختياري؛ لا نسمح له بإفشال الحركة.
+    }
   }
 
   double _jitterPitch() => 0.96 + _random.nextDouble() * 0.08;
 
-  /// تناوب دائري بين متغيرات الصوت المتكرر (place/slide/capture).
-  String _variant(String base) {
-    final i = 1 + _random.nextInt(3);
-    return '$base$i';
-  }
+  String _variant(String base) => '$base${1 + _random.nextInt(3)}';
 
   Future<void> tap() => _play('ui_tap', pitch: _jitterPitch());
   Future<void> select() => _play('select', pitch: _jitterPitch());
   Future<void> place() => _play(_variant('place'), pitch: _jitterPitch());
   Future<void> slide() => _play(_variant('slide'));
   Future<void> land() => _play('land');
+
   Future<void> capture({bool multi = false, int step = 0}) {
     if (multi) return _play('capture_multi');
-    // كل أكل متتابع في نفس الدور أعلى نبرة قليلاً.
-    final pitch = (1.0 + step * 0.06).clamp(1.0, 1.18);
+    final pitch = (1.0 + step * 0.06).clamp(1.0, 1.18).toDouble();
     return _play(_variant('capture'), pitch: pitch);
   }
 
@@ -121,10 +95,18 @@ class SoundManager {
   Future<void> draw() => _play('draw');
 
   Future<void> dispose() async {
-    for (final p in _pool) {
+    final players = List<AudioPlayer?>.from(_pool);
+    for (final player in players) {
       try {
-        await p?.dispose();
+        await player?.dispose();
       } catch (_) {}
     }
+    for (var i = 0; i < _pool.length; i++) {
+      _pool[i] = null;
+    }
+    _sources.clear();
+    _ready = false;
+    _initFuture = null;
+    _next = 0;
   }
 }
