@@ -604,8 +604,13 @@ class _SandBoardState extends State<SandBoard>
         pebble = AnimatedScale(
           scale: isSelected ? 1.12 : 1.0,
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          child: pebble,
+          curve: Curves.easeOutBack,
+          child: AnimatedSlide(
+            offset: isSelected ? const Offset(0, -0.10) : Offset.zero,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            child: pebble,
+          ),
         );
 
         if (isPlacing) {
@@ -751,16 +756,28 @@ class _TrailPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = SudaneseTheme.sandDark.withValues(alpha: opacity)
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(from, to, paint);
-    // دوامة رمل صغيرة عند الوجهة.
-    canvas.drawCircle(
-      to,
-      6,
-      Paint()
-        ..color = SudaneseTheme.sandDark.withValues(alpha: opacity * 0.7),
-    );
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final middle = Offset.lerp(from, to, 0.5)!;
+    final path = Path()
+      ..moveTo(from.dx, from.dy)
+      ..quadraticBezierTo(middle.dx + 5, middle.dy - 5, to.dx, to.dy);
+    canvas.drawPath(path, paint);
+    // حلقتان من الرمل المضغوط عند نقطة الانطلاق والهبوط، مع حبيبات متناثرة.
+    for (var i = 0; i < 3; i++) {
+      final t = i / 2;
+      final p = Offset.lerp(from, to, t)!;
+      canvas.drawCircle(p, 4 + i * 2.5, Paint()
+        ..color = SudaneseTheme.sandDark.withValues(alpha: opacity * (0.65 - i * 0.15))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4);
+    }
+    for (var i = 0; i < 7; i++) {
+      final t = (i + 1) / 8;
+      final p = Offset.lerp(from, to, t)! + Offset(0, math.sin(t * math.pi) * -4);
+      canvas.drawCircle(p, 1.2 + (i % 2), Paint()..color = SudaneseTheme.straw.withValues(alpha: opacity));
+    }
   }
 
   @override
