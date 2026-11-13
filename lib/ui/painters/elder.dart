@@ -162,7 +162,9 @@ class ElderPainter extends CustomPainter {
     canvas.drawPath(cap, Paint()..color = _cloth);
     canvas.drawRect(const Rect.fromLTWH(32, 29, 36, 4), Paint()..color = _red);
     final stitch = Paint()..color = _turquoise..strokeWidth = 1.2;
-    for (var x = 37.0; x <= 63; x += 6) canvas.drawLine(Offset(x, 18), Offset(x, 26), stitch);
+    for (var x = 37.0; x <= 63; x += 6) {
+      canvas.drawLine(Offset(x, 18), Offset(x, 26), stitch);
+    }
     canvas.drawCircle(const Offset(50, 20), 2, Paint()..color = _gold);
   }
 

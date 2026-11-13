@@ -20,7 +20,11 @@ class PebblePainter extends CustomPainter {
       final a = -math.pi / 2 + i * math.pi * 2 / points;
       final rr = r * radii[i];
       final p = center + Offset(math.cos(a) * rr * (i.isEven ? 1.0 : .94), math.sin(a) * rr);
-      if (i == 0) pebble.moveTo(p.dx, p.dy); else pebble.lineTo(p.dx, p.dy);
+      if (i == 0) {
+        pebble.moveTo(p.dx, p.dy);
+      } else {
+        pebble.lineTo(p.dx, p.dy);
+      }
     }
     pebble.close();
     canvas.drawPath(pebble, Paint()..color = def.base);
